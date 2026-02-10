@@ -1,0 +1,58 @@
+# ==========================
+# Python / Django
+# ==========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+*.egg
+dist/
+build/
+*.so
+*.whl
+
+# Virtual environments
+backend/venv/
+.venv/
+venv/
+
+# Django
+backend/db.sqlite3
+*.log
+*.pot
+*.mo
+media/
+staticfiles/
+
+# ==========================
+# Node / Vue / Vite
+# ==========================
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ==========================
+# Environment / Secrets
+# ==========================
+.env
+.env.local
+.env.*.local
+!.env.example
+!frontend/.env.example
+
+# ==========================
+# IDE / Editor
+# ==========================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
