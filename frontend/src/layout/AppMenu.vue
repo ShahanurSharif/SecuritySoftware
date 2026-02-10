@@ -37,6 +37,16 @@ const model = ref([
         label: 'Administration',
         items: [
             {
+                label: 'Company',
+                icon: 'pi pi-fw pi-building',
+                to: '/company'
+            },
+            {
+                label: 'Branches',
+                icon: 'pi pi-fw pi-map-marker',
+                to: '/branches'
+            },
+            {
                 label: 'Users',
                 icon: 'pi pi-fw pi-users',
                 to: '/users'
