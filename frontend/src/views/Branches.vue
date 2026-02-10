@@ -15,12 +15,12 @@ const branches = ref([
         companyId: 1,
         companyName: 'SecureCorp Ltd.',
         name: 'Downtown Branch',
-        address: '789 Broadway, New York, NY 10003',
+        address: { full: '789 Broadway, New York, NY 10003', flat: '789', street: 'Broadway', suburb: 'NoHo', postalCode: '10003', state: 'NY', country: 'US' },
         managerNumber: '+1-212-555-0301',
         storeNumber: 'STR-001',
         staff: [
-            { id: 1, name: 'Alice Johnson', designation: 'Security Analyst', number: '+1-212-555-1001' },
-            { id: 2, name: 'Bob Martinez', designation: 'Guard', number: '+1-212-555-1002' }
+            { id: 1, name: 'Alice Johnson', designation: 'Security Analyst', number: '+1-212-555-1001', email: 'alice@securecorp.com' },
+            { id: 2, name: 'Bob Martinez', designation: 'Guard', number: '+1-212-555-1002', email: 'bob@securecorp.com' }
         ]
     },
     {
@@ -28,11 +28,11 @@ const branches = ref([
         companyId: 2,
         companyName: 'CyberShield Inc.',
         name: 'Bay Area Office',
-        address: '321 Mission St, San Francisco, CA 94105',
+        address: { full: '321 Mission St, San Francisco, CA 94105', flat: '321', street: 'Mission St', suburb: 'SoMa', postalCode: '94105', state: 'CA', country: 'US' },
         managerNumber: '+1-415-555-0401',
         storeNumber: 'STR-002',
         staff: [
-            { id: 1, name: 'Carol Lee', designation: 'Branch Manager', number: '+1-415-555-2001' }
+            { id: 1, name: 'Carol Lee', designation: 'Branch Manager', number: '+1-415-555-2001', email: 'carol@cybershield.com' }
         ]
     }
 ]);
@@ -45,9 +45,18 @@ const isEditing = ref(false);
 const submitted = ref(false);
 const staffSubmitted = ref(false);
 
-const emptyBranch = { id: null, companyId: null, companyName: '', name: '', address: '', managerNumber: '', storeNumber: '', staff: [] };
-const emptyStaff = { id: null, name: '', designation: '', number: '' };
-const branch = ref({ ...emptyBranch });
+// --- Filter refs ---
+const filterCompany = ref(null);
+const filterBranchName = ref('');
+const filterPhone = ref('');
+const filterAddress = ref('');
+const filterState = ref('');
+const filterSuburb = ref('');
+
+const emptyAddress = { full: '', flat: '', street: '', suburb: '', postalCode: '', state: '', country: '' };
+const emptyBranch = { id: null, companyId: null, companyName: '', name: '', address: { ...emptyAddress }, managerNumber: '', storeNumber: '', staff: [] };
+const emptyStaff = { id: null, name: '', designation: '', number: '', email: '' };
+const branch = ref({ ...emptyBranch, address: { ...emptyAddress }, staff: [] });
 const selectedBranch = ref(null);
 const staffMember = ref({ ...emptyStaff });
 const selectedStaff = ref(null);
@@ -61,16 +70,61 @@ let nextId = 3;
 let nextStaffId = 10;
 
 const isValidPhone = (val) => /^[+]?[\d\s()-]{7,20}$/.test(val);
+const isValidEmail = (val) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
 
+// --- Filtered branches ---
+const filteredBranches = computed(() => {
+    return branches.value.filter((b) => {
+        if (filterCompany.value && b.companyId !== filterCompany.value) return false;
+        if (filterBranchName.value && !b.name.toLowerCase().includes(filterBranchName.value.toLowerCase())) return false;
+        if (filterPhone.value && !b.managerNumber.toLowerCase().includes(filterPhone.value.toLowerCase())) return false;
+        const addrStr = [b.address.full, b.address.flat, b.address.street, b.address.suburb, b.address.postalCode, b.address.state, b.address.country].filter(Boolean).join(' ').toLowerCase();
+        if (filterAddress.value && !addrStr.includes(filterAddress.value.toLowerCase())) return false;
+        if (filterState.value && !(b.address.state || '').toLowerCase().includes(filterState.value.toLowerCase())) return false;
+        if (filterSuburb.value && !(b.address.suburb || '').toLowerCase().includes(filterSuburb.value.toLowerCase())) return false;
+        return true;
+    });
+});
+
+const clearFilters = () => {
+    filterCompany.value = null;
+    filterBranchName.value = '';
+    filterPhone.value = '';
+    filterAddress.value = '';
+    filterState.value = '';
+    filterSuburb.value = '';
+};
+
+// --- Google Places autocomplete stub ---
+const addressSuggestions = ref([]);
+
+const searchAddress = (event) => {
+    const query = event.query;
+    // TODO: Replace with real Google Places API call
+    setTimeout(() => {
+        addressSuggestions.value = [
+            { full: `${query}, Suburb, State 00000, Country`, flat: '', street: query, suburb: 'Suburb', postalCode: '00000', state: 'State', country: 'Country' }
+        ];
+    }, 300);
+};
+
+const onAddressSelect = (event) => {
+    const selected = event.value;
+    if (selected && typeof selected === 'object') {
+        branch.value.address = { ...selected };
+    }
+};
+
+// --- Branch CRUD ---
 const openNew = () => {
-    branch.value = { ...emptyBranch, staff: [] };
+    branch.value = { ...emptyBranch, address: { ...emptyAddress }, staff: [] };
     isEditing.value = false;
     submitted.value = false;
     branchDialog.value = true;
 };
 
 const editBranch = (data) => {
-    branch.value = { ...data, staff: data.staff.map((s) => ({ ...s })) };
+    branch.value = { ...data, address: { ...data.address }, staff: data.staff.map((s) => ({ ...s })) };
     isEditing.value = true;
     submitted.value = false;
     branchDialog.value = true;
@@ -84,7 +138,7 @@ const confirmDelete = (data) => {
 const saveBranch = () => {
     submitted.value = true;
 
-    if (!branch.value.companyId || !branch.value.name.trim() || !branch.value.address.trim() || !branch.value.managerNumber.trim() || !branch.value.storeNumber.trim()) return;
+    if (!branch.value.companyId || !branch.value.name.trim() || !branch.value.address.street.trim() || !branch.value.managerNumber.trim() || !branch.value.storeNumber.trim()) return;
     if (!isValidPhone(branch.value.managerNumber)) return;
 
     const comp = companies.value.find((c) => c.id === branch.value.companyId);
@@ -92,11 +146,11 @@ const saveBranch = () => {
 
     if (isEditing.value) {
         const idx = branches.value.findIndex((b) => b.id === branch.value.id);
-        if (idx !== -1) branches.value[idx] = { ...branch.value };
+        if (idx !== -1) branches.value[idx] = { ...branch.value, address: { ...branch.value.address }, staff: branch.value.staff.map((s) => ({ ...s })) };
         toast.add({ severity: 'success', summary: 'Updated', detail: 'Branch updated successfully.', life: 3000 });
     } else {
         branch.value.id = nextId++;
-        branches.value.push({ ...branch.value });
+        branches.value.push({ ...branch.value, address: { ...branch.value.address }, staff: branch.value.staff.map((s) => ({ ...s })) });
         toast.add({ severity: 'success', summary: 'Created', detail: 'Branch created successfully.', life: 3000 });
     }
     branchDialog.value = false;
@@ -139,6 +193,7 @@ const saveStaff = () => {
 
     if (!staffMember.value.name.trim() || !staffMember.value.designation.trim() || !staffMember.value.number.trim()) return;
     if (!isValidPhone(staffMember.value.number)) return;
+    if (staffMember.value.email && !isValidEmail(staffMember.value.email)) return;
 
     const br = branches.value.find((b) => b.id === viewStaffBranchId.value);
     if (!br) return;
@@ -162,13 +217,32 @@ const deleteStaffConfirmed = () => {
     selectedStaff.value = null;
     toast.add({ severity: 'success', summary: 'Deleted', detail: 'Staff member removed.', life: 3000 });
 };
+
+const formatAddress = (addr) => {
+    if (!addr) return '';
+    return [addr.flat, addr.street, addr.suburb, addr.state, addr.postalCode, addr.country].filter(Boolean).join(', ');
+};
 </script>
 
 <template>
     <Toast />
     <div class="card">
         <div class="font-semibold text-xl mb-4">Branch Management</div>
-        <DataTable :value="branches" :paginator="true" :rows="10" dataKey="id" :rowHover="true" responsiveLayout="scroll">
+
+        <!-- Filter Bar -->
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+            <Select v-model="filterCompany" :options="companies" optionLabel="name" optionValue="id" placeholder="Company" :showClear="true" class="w-full" />
+            <InputText v-model="filterBranchName" placeholder="Branch Name" class="w-full" />
+            <InputText v-model="filterPhone" placeholder="Phone" class="w-full" />
+            <InputText v-model="filterAddress" placeholder="Address" class="w-full" />
+            <InputText v-model="filterState" placeholder="State" class="w-full" />
+            <div class="flex gap-2">
+                <InputText v-model="filterSuburb" placeholder="Suburb" class="w-full" />
+                <Button icon="pi pi-filter-slash" severity="secondary" outlined @click="clearFilters" v-tooltip.top="'Clear filters'" />
+            </div>
+        </div>
+
+        <DataTable :value="filteredBranches" :paginator="true" :rows="10" dataKey="id" :rowHover="true" responsiveLayout="scroll">
             <template #header>
                 <div class="flex justify-between items-center">
                     <span class="text-xl text-surface-900 dark:text-surface-0 font-bold">Branches</span>
@@ -176,9 +250,11 @@ const deleteStaffConfirmed = () => {
                 </div>
             </template>
             <template #empty> No branches found. </template>
-            <Column field="companyName" header="Company" sortable style="min-width: 12rem"></Column>
             <Column field="name" header="Branch Name" sortable style="min-width: 12rem"></Column>
-            <Column field="address" header="Address" sortable style="min-width: 16rem"></Column>
+            <Column field="companyName" header="Company" sortable style="min-width: 12rem"></Column>
+            <Column header="Address" sortable style="min-width: 16rem">
+                <template #body="{ data }">{{ formatAddress(data.address) }}</template>
+            </Column>
             <Column field="managerNumber" header="Manager No." sortable style="min-width: 10rem"></Column>
             <Column field="storeNumber" header="Store No." sortable style="min-width: 8rem"></Column>
             <Column header="Staff" style="min-width: 8rem">
@@ -198,38 +274,70 @@ const deleteStaffConfirmed = () => {
     </div>
 
     <!-- Branch Dialog -->
-    <Dialog v-model:visible="branchDialog" :header="isEditing ? 'Edit Branch' : 'Add Branch'" :modal="true" :style="{ width: '600px' }">
+    <Dialog v-model:visible="branchDialog" :header="isEditing ? 'Edit Branch' : 'Add Branch'" :modal="true" :style="{ width: '700px' }">
         <form @submit.prevent="saveBranch">
             <div class="flex flex-col gap-6 mt-4">
                 <div class="flex flex-col gap-2">
-                    <label for="branchCompany" class="font-medium">Company *</label>
-                    <Select id="branchCompany" v-model="branch.companyId" :options="companies" optionLabel="name" optionValue="id" placeholder="Select a company" :invalid="submitted && !branch.companyId" />
+                    <label class="font-medium">Company *</label>
+                    <Select v-model="branch.companyId" :options="companies" optionLabel="name" optionValue="id" placeholder="Select a company" :invalid="submitted && !branch.companyId" />
                     <small v-if="submitted && !branch.companyId" class="text-red-500">Please select a company.</small>
                 </div>
 
                 <div class="flex flex-col gap-2">
-                    <label for="branchName" class="font-medium">Branch Name *</label>
-                    <InputText id="branchName" v-model="branch.name" :invalid="submitted && !branch.name.trim()" placeholder="Enter branch name" />
+                    <label class="font-medium">Branch Name *</label>
+                    <InputText v-model="branch.name" :invalid="submitted && !branch.name.trim()" placeholder="Enter branch name" />
                     <small v-if="submitted && !branch.name.trim()" class="text-red-500">Branch name is required.</small>
                 </div>
 
-                <div class="flex flex-col gap-2">
-                    <label for="branchAddress" class="font-medium">Address (Google API) *</label>
-                    <InputText id="branchAddress" v-model="branch.address" :invalid="submitted && !branch.address.trim()" placeholder="Search location..." />
-                    <small class="text-muted-color"><i class="pi pi-map-marker mr-1"></i>Google Places integration — enter address manually for now</small>
-                    <small v-if="submitted && !branch.address.trim()" class="text-red-500">Address is required.</small>
+                <!-- Google Address Section -->
+                <div class="flex flex-col gap-4">
+                    <label class="font-medium">Address *</label>
+                    <AutoComplete v-model="branch.address.full" :suggestions="addressSuggestions" optionLabel="full" placeholder="Search address from Google..." @complete="searchAddress" @item-select="onAddressSelect" forceSelection:false class="w-full" />
+                    <small class="text-muted-color -mt-2"><i class="pi pi-map-marker mr-1"></i>Select from Google Places or fill manually below</small>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="flex flex-col gap-2">
+                            <label class="text-sm">Flat / House No.</label>
+                            <InputText v-model="branch.address.flat" placeholder="Flat / House No." />
+                        </div>
+                        <div class="flex flex-col gap-2">
+                            <label class="text-sm">Street *</label>
+                            <InputText v-model="branch.address.street" :invalid="submitted && !branch.address.street.trim()" placeholder="Street" />
+                            <small v-if="submitted && !branch.address.street.trim()" class="text-red-500">Street is required.</small>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="flex flex-col gap-2">
+                            <label class="text-sm">Suburb</label>
+                            <InputText v-model="branch.address.suburb" placeholder="Suburb" />
+                        </div>
+                        <div class="flex flex-col gap-2">
+                            <label class="text-sm">Postal Code</label>
+                            <InputText v-model="branch.address.postalCode" placeholder="Postal Code" />
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="flex flex-col gap-2">
+                            <label class="text-sm">State</label>
+                            <InputText v-model="branch.address.state" placeholder="State" />
+                        </div>
+                        <div class="flex flex-col gap-2">
+                            <label class="text-sm">Country</label>
+                            <InputText v-model="branch.address.country" placeholder="Country" />
+                        </div>
+                    </div>
                 </div>
 
                 <div class="flex flex-col gap-2">
-                    <label for="branchManager" class="font-medium">Manager Number *</label>
-                    <InputText id="branchManager" v-model="branch.managerNumber" :invalid="submitted && (!branch.managerNumber.trim() || !isValidPhone(branch.managerNumber))" placeholder="+1-212-555-0100" />
+                    <label class="font-medium">Manager Number *</label>
+                    <InputText v-model="branch.managerNumber" :invalid="submitted && (!branch.managerNumber.trim() || !isValidPhone(branch.managerNumber))" placeholder="+1-212-555-0100" />
                     <small v-if="submitted && !branch.managerNumber.trim()" class="text-red-500">Manager number is required.</small>
                     <small v-else-if="submitted && !isValidPhone(branch.managerNumber)" class="text-red-500">Enter a valid phone number.</small>
                 </div>
 
                 <div class="flex flex-col gap-2">
-                    <label for="branchStore" class="font-medium">Store Number *</label>
-                    <InputText id="branchStore" v-model="branch.storeNumber" :invalid="submitted && !branch.storeNumber.trim()" placeholder="STR-001" />
+                    <label class="font-medium">Store Number *</label>
+                    <InputText v-model="branch.storeNumber" :invalid="submitted && !branch.storeNumber.trim()" placeholder="STR-001" />
                     <small v-if="submitted && !branch.storeNumber.trim()" class="text-red-500">Store number is required.</small>
                 </div>
             </div>
@@ -242,7 +350,7 @@ const deleteStaffConfirmed = () => {
     </Dialog>
 
     <!-- Staff Panel Dialog -->
-    <Dialog v-model:visible="showStaffPanel" :header="`Staff — ${viewStaffBranch?.name || ''}`" :modal="true" :style="{ width: '700px' }">
+    <Dialog v-model:visible="showStaffPanel" :header="`Staff — ${viewStaffBranch?.name || ''}`" :modal="true" :style="{ width: '750px' }">
         <DataTable :value="viewStaffBranch?.staff || []" dataKey="id" :rowHover="true" responsiveLayout="scroll">
             <template #header>
                 <div class="flex justify-between items-center">
@@ -252,8 +360,9 @@ const deleteStaffConfirmed = () => {
             </template>
             <template #empty> No staff members. </template>
             <Column field="name" header="Name" style="min-width: 12rem"></Column>
-            <Column field="designation" header="Designation" style="min-width: 12rem"></Column>
-            <Column field="number" header="Phone Number" style="min-width: 12rem"></Column>
+            <Column field="designation" header="Designation" style="min-width: 10rem"></Column>
+            <Column field="email" header="Email" style="min-width: 14rem"></Column>
+            <Column field="number" header="Phone Number" style="min-width: 10rem"></Column>
             <Column header="Actions" style="min-width: 8rem">
                 <template #body="{ data }">
                     <div class="flex gap-2">
@@ -279,6 +388,12 @@ const deleteStaffConfirmed = () => {
                     <label class="font-medium">Designation *</label>
                     <InputText v-model="staffMember.designation" :invalid="staffSubmitted && !staffMember.designation.trim()" placeholder="Designation" />
                     <small v-if="staffSubmitted && !staffMember.designation.trim()" class="text-red-500">Designation is required.</small>
+                </div>
+
+                <div class="flex flex-col gap-2">
+                    <label class="font-medium">Email</label>
+                    <InputText v-model="staffMember.email" type="email" :invalid="staffSubmitted && staffMember.email && !isValidEmail(staffMember.email)" placeholder="staff@company.com" />
+                    <small v-if="staffSubmitted && staffMember.email && !isValidEmail(staffMember.email)" class="text-red-500">Enter a valid email address.</small>
                 </div>
 
                 <div class="flex flex-col gap-2">
