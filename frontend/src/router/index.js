@@ -49,6 +49,16 @@ const router = createRouter({
                     path: '/settings',
                     name: 'settings',
                     component: () => import('@/views/Settings.vue')
+                },
+                {
+                    path: '/qrcodes',
+                    name: 'qrcodes',
+                    component: () => import('@/views/QRCodes.vue')
+                },
+                {
+                    path: '/scan',
+                    name: 'scan',
+                    component: () => import('@/views/Scan.vue')
                 }
             ]
         },

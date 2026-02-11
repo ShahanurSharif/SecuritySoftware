@@ -34,6 +34,21 @@ const model = ref([
         ]
     },
     {
+        label: 'Patrolling',
+        items: [
+            {
+                label: 'QR Codes',
+                icon: 'pi pi-fw pi-qrcode',
+                to: '/qrcodes'
+            },
+            {
+                label: 'Scan',
+                icon: 'pi pi-fw pi-camera',
+                to: '/scan'
+            }
+        ]
+    },
+    {
         label: 'Administration',
         items: [
             {

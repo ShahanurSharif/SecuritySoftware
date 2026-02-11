@@ -255,7 +255,7 @@ const formatAddress = (addr) => {
             <Column header="Address" sortable style="min-width: 16rem">
                 <template #body="{ data }">{{ formatAddress(data.address) }}</template>
             </Column>
-            <Column field="managerNumber" header="Manager No." sortable style="min-width: 10rem"></Column>
+            <Column field="managerNumber" header="Front Desk No." sortable style="min-width: 10rem"></Column>
             <Column field="storeNumber" header="Store No." sortable style="min-width: 8rem"></Column>
             <Column header="Staff" style="min-width: 8rem">
                 <template #body="{ data }">
@@ -329,9 +329,9 @@ const formatAddress = (addr) => {
                 </div>
 
                 <div class="flex flex-col gap-2">
-                    <label class="font-medium">Manager Number *</label>
+                    <label class="font-medium">Front Desk / Reception Number *</label>
                     <InputText v-model="branch.managerNumber" :invalid="submitted && (!branch.managerNumber.trim() || !isValidPhone(branch.managerNumber))" placeholder="+1-212-555-0100" />
-                    <small v-if="submitted && !branch.managerNumber.trim()" class="text-red-500">Manager number is required.</small>
+                    <small v-if="submitted && !branch.managerNumber.trim()" class="text-red-500">Front desk number is required.</small>
                     <small v-else-if="submitted && !isValidPhone(branch.managerNumber)" class="text-red-500">Enter a valid phone number.</small>
                 </div>
 

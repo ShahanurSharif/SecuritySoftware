@@ -5,10 +5,10 @@ import { useToast } from 'primevue/usetoast';
 const toast = useToast();
 
 const users = ref([
-    { id: 1, firstName: 'Admin', lastName: 'User', email: 'admin@security.io', role: 'Admin', status: 'Active', lastLogin: '2026-02-10 08:00:00', birthday: '1990-01-15', phone: '+1-212-555-0100', address: 'New York, NY', preferredLocations: ['New York', 'Los Angeles'], photo: null },
-    { id: 2, firstName: 'John', lastName: 'Doe', email: 'john.doe@security.io', role: 'Analyst', status: 'Active', lastLogin: '2026-02-10 07:45:00', birthday: '1988-05-20', phone: '+1-415-555-0200', address: 'San Francisco, CA', preferredLocations: ['San Francisco'], photo: null },
-    { id: 3, firstName: 'Jane', lastName: 'Smith', email: 'jane.smith@security.io', role: 'Analyst', status: 'Active', lastLogin: '2026-02-09 16:00:00', birthday: '1992-08-10', phone: '+1-312-555-0300', address: 'Chicago, IL', preferredLocations: ['Chicago', 'New York'], photo: null },
-    { id: 4, firstName: 'Bob', lastName: 'Wilson', email: 'bob.wilson@security.io', role: 'Viewer', status: 'Inactive', lastLogin: '2026-01-15 10:30:00', birthday: '1985-12-01', phone: '+1-713-555-0400', address: 'Houston, TX', preferredLocations: ['Houston'], photo: null }
+    { id: 1, firstName: 'Admin', lastName: 'User', email: 'admin@security.io', role: 'Admin', group: 'Admin', status: 'Active', lastLogin: '2026-02-10 08:00:00', birthday: '1990-01-15', phone: '+1-212-555-0100', address: 'New York, NY', photo: null },
+    { id: 2, firstName: 'John', lastName: 'Doe', email: 'john.doe@security.io', role: 'Analyst', group: 'Analyst', status: 'Active', lastLogin: '2026-02-10 07:45:00', birthday: '1988-05-20', phone: '+1-415-555-0200', address: 'San Francisco, CA', photo: null },
+    { id: 3, firstName: 'Jane', lastName: 'Smith', email: 'jane.smith@security.io', role: 'Analyst', group: 'LPO', status: 'Active', lastLogin: '2026-02-09 16:00:00', birthday: '1992-08-10', phone: '+1-312-555-0300', address: 'Chicago, IL', photo: null },
+    { id: 4, firstName: 'Bob', lastName: 'Wilson', email: 'bob.wilson@security.io', role: 'Viewer', group: 'Viewer', status: 'Inactive', lastLogin: '2026-01-15 10:30:00', birthday: '1985-12-01', phone: '+1-713-555-0400', address: 'Houston, TX', photo: null }
 ]);
 
 const userDialog = ref(false);
@@ -16,17 +16,12 @@ const deleteDialog = ref(false);
 const isEditing = ref(false);
 const submitted = ref(false);
 
-const locationOptions = ref([
-    'New York',
-    'Los Angeles',
-    'San Francisco',
-    'Chicago',
-    'Houston',
-    'Miami',
-    'Seattle',
-    'Boston',
-    'Denver',
-    'Atlanta'
+const groupOptions = ref([
+    { label: 'Admin', value: 'Admin' },
+    { label: 'Manager', value: 'Manager' },
+    { label: 'Analyst', value: 'Analyst' },
+    { label: 'LPO', value: 'LPO' },
+    { label: 'Viewer', value: 'Viewer' }
 ]);
 
 const emptyUser = {
@@ -38,7 +33,7 @@ const emptyUser = {
     birthday: null,
     phone: '',
     address: '',
-    preferredLocations: [],
+    group: null,
     photo: null,
     role: 'Viewer',
     status: 'Active'
@@ -68,7 +63,7 @@ const getRoleSeverity = (role) => {
 };
 
 const openNew = () => {
-    user.value = { ...emptyUser, preferredLocations: [] };
+    user.value = { ...emptyUser };
     photoPreview.value = null;
     isEditing.value = false;
     submitted.value = false;
@@ -76,7 +71,7 @@ const openNew = () => {
 };
 
 const editUser = (data) => {
-    user.value = { ...data, preferredLocations: [...(data.preferredLocations || [])], birthday: data.birthday ? new Date(data.birthday) : null, password: '' };
+    user.value = { ...data, birthday: data.birthday ? new Date(data.birthday) : null, password: '' };
     photoPreview.value = data.photo;
     isEditing.value = true;
     submitted.value = false;
@@ -113,6 +108,7 @@ const saveUser = () => {
     if (!isEditing.value && (!user.value.password || user.value.password.length < 6)) return;
     if (!user.value.phone.trim() || !isValidPhone(user.value.phone)) return;
     if (!user.value.birthday) return;
+    if (!user.value.group) return;
 
     const fullName = `${user.value.firstName} ${user.value.lastName}`;
 
@@ -180,6 +176,7 @@ const formatDate = (date) => {
                     <Tag :value="data.role" :severity="getRoleSeverity(data.role)" />
                 </template>
             </Column>
+            <Column field="group" header="Group" sortable style="min-width: 8rem"></Column>
             <Column field="status" header="Status" sortable style="min-width: 8rem">
                 <template #body="{ data }">
                     <Tag :value="data.status" :severity="data.status === 'Active' ? 'success' : 'secondary'" />
@@ -267,8 +264,9 @@ const formatDate = (date) => {
                 </div>
 
                 <div class="flex flex-col gap-2">
-                    <label class="font-medium">Preferred Locations</label>
-                    <MultiSelect v-model="user.preferredLocations" :options="locationOptions" placeholder="Select locations" :maxSelectedLabels="3" display="chip" />
+                    <label class="font-medium">Group *</label>
+                    <Select v-model="user.group" :options="groupOptions" optionLabel="label" optionValue="value" placeholder="Select a group" :invalid="submitted && !user.group" />
+                    <small v-if="submitted && !user.group" class="text-red-500">Group is required.</small>
                 </div>
             </div>
 
