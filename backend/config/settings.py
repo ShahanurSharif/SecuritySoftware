@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'companies',
     'branches',
     'profiles',
+    'qr_codes',
 ]
 
 MIDDLEWARE = [

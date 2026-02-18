@@ -34,8 +34,13 @@ const model = ref([
         ]
     },
     {
-        label: 'Patrolling',
+        label: 'Activity',
         items: [
+            {
+                label: 'Attendance',
+                icon: 'pi pi-fw pi-clock',
+                to: '/attendance'
+            },
             {
                 label: 'QR Codes',
                 icon: 'pi pi-fw pi-qrcode',

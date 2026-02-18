@@ -18,8 +18,13 @@ const filterText = ref('');
 const userDialog = ref(false);
 const deleteDialog = ref(false);
 const roleDialog = ref(false);
+const passwordDialog = ref(false);
+const mediaDialog = ref(false);
+const viewDialog = ref(false);
 const isEditing = ref(false);
 const submitted = ref(false);
+const passwordSubmitted = ref(false);
+const mediaSubmitted = ref(false);
 
 const groupOptions = ref([
     { label: 'Admin', value: 'Admin' },
@@ -49,6 +54,42 @@ const selectedUser = ref(null);
 const photoPreview = ref(null);
 const photoFile = ref(null);
 
+// Change password
+const newPassword = ref('');
+const confirmPassword = ref('');
+
+// Media upload
+const mediaFiles = ref([]);
+const mediaFileInput = ref(null);
+
+// View profile
+const viewProfile = ref(null);
+const viewLoading = ref(false);
+
+// File preview
+const previewDialog = ref(false);
+const previewUrl = ref('');
+const previewType = ref('');
+const previewName = ref('');
+
+const isPreviewable = (m) => {
+    const mime = (m.mime_type || '').toLowerCase();
+    return mime.startsWith('image/') || mime === 'application/pdf';
+};
+
+const openPreview = (m) => {
+    previewUrl.value = m.file_url;
+    previewName.value = m.name;
+    const mime = (m.mime_type || '').toLowerCase();
+    if (mime.startsWith('image/')) previewType.value = 'image';
+    else if (mime === 'application/pdf') previewType.value = 'pdf';
+    else previewType.value = 'other';
+    previewDialog.value = true;
+};
+
+// Action menu
+const actionMenu = ref();
+
 const isValidPhone = (val) => /^[+]?[\d\s()-]{7,20}$/.test(val);
 const isValidEmail = (val) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
 
@@ -71,6 +112,24 @@ const formatDate = (date) => {
     if (!date) return '';
     const d = new Date(date);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+const viewAge = computed(() => {
+    if (!viewProfile.value?.birthday) return null;
+    const birth = new Date(viewProfile.value.birthday);
+    const today = new Date();
+    let a = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) a--;
+    return a;
+});
+
+const formatFileSize = (bytes) => {
+    if (!bytes) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 };
 
 // --- Map API response to frontend shape ---
@@ -153,6 +212,22 @@ const onSearch = () => {
         currentPage.value = 1;
         fetchUsers();
     }, 400);
+};
+
+// --- Action menu items ---
+const getActionItems = (data) => [
+    { label: 'View Profile', icon: 'pi pi-eye', command: () => openViewDialog(data) },
+    { label: 'Edit', icon: 'pi pi-pencil', command: () => editUser(data) },
+    { label: 'Change Role', icon: 'pi pi-shield', command: () => openRoleDialog(data) },
+    { label: 'Change Password', icon: 'pi pi-lock', command: () => openPasswordDialog(data) },
+    { label: 'Add Media', icon: 'pi pi-images', command: () => openMediaDialog(data) },
+    { separator: true },
+    { label: 'Delete', icon: 'pi pi-trash', class: 'text-red-500', command: () => confirmDelete(data) }
+];
+
+const toggleActionMenu = (event, data) => {
+    selectedUser.value = data;
+    actionMenu.value.toggle(event);
 };
 
 const openNew = () => {
@@ -286,6 +361,105 @@ const saveRoleChange = async () => {
         toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to update role.', life: 4000 });
     }
 };
+
+// --- Change password ---
+const openPasswordDialog = (data) => {
+    selectedUser.value = data;
+    newPassword.value = '';
+    confirmPassword.value = '';
+    passwordSubmitted.value = false;
+    passwordDialog.value = true;
+};
+
+const savePassword = async () => {
+    passwordSubmitted.value = true;
+    if (!newPassword.value || newPassword.value.length < 6) return;
+    if (newPassword.value !== confirmPassword.value) return;
+
+    try {
+        await api.patch(`/profiles/${selectedUser.value.id}/password/`, {
+            password: newPassword.value,
+            confirm_password: confirmPassword.value
+        });
+        toast.add({ severity: 'success', summary: 'Password Changed', detail: `Password updated for ${selectedUser.value.firstName} ${selectedUser.value.lastName}.`, life: 3000 });
+        passwordDialog.value = false;
+    } catch (err) {
+        const detail = err.response?.data?.confirm_password?.[0] || err.response?.data?.detail || 'Failed to change password.';
+        toast.add({ severity: 'error', summary: 'Error', detail, life: 4000 });
+    }
+};
+
+// --- Add media ---
+const openMediaDialog = (data) => {
+    selectedUser.value = data;
+    mediaFiles.value = [];
+    mediaSubmitted.value = false;
+    mediaDialog.value = true;
+};
+
+const triggerMediaUpload = () => {
+    mediaFileInput.value?.click();
+};
+
+const onMediaFilesSelected = (event) => {
+    const files = Array.from(event.target.files || []);
+    for (const file of files) {
+        mediaFiles.value.push({
+            file,
+            name: file.name.replace(/\.[^/.]+$/, ''),
+            size: file.size,
+            type: file.type,
+            originalName: file.name
+        });
+    }
+    // Reset input so same file can be re-selected
+    if (mediaFileInput.value) mediaFileInput.value.value = '';
+};
+
+const removeMediaFile = (index) => {
+    mediaFiles.value.splice(index, 1);
+};
+
+const saveMedia = async () => {
+    mediaSubmitted.value = true;
+    if (mediaFiles.value.length === 0) return;
+    const hasEmptyName = mediaFiles.value.some(f => !f.name.trim());
+    if (hasEmptyName) return;
+
+    try {
+        const { data: detailData } = await api.get(`/profiles/${selectedUser.value.id}/detail/`);
+        for (const item of mediaFiles.value) {
+            const fd = new FormData();
+            fd.append('file', item.file);
+            fd.append('name', item.name.trim());
+            fd.append('content_type', detailData._content_type_id);
+            fd.append('object_id', detailData._profile_id);
+            await api.post('/media/', fd, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+        }
+        toast.add({ severity: 'success', summary: 'Media Uploaded', detail: `${mediaFiles.value.length} file(s) uploaded.`, life: 3000 });
+        mediaDialog.value = false;
+    } catch {
+        toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to upload media.', life: 4000 });
+    }
+};
+
+// --- View profile ---
+const openViewDialog = async (data) => {
+    viewProfile.value = null;
+    viewLoading.value = true;
+    viewDialog.value = true;
+    try {
+        const { data: detail } = await api.get(`/profiles/${data.id}/detail/`);
+        viewProfile.value = detail;
+    } catch {
+        toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load profile.', life: 4000 });
+        viewDialog.value = false;
+    } finally {
+        viewLoading.value = false;
+    }
+};
 </script>
 
 <template>
@@ -327,13 +501,10 @@ const saveRoleChange = async () => {
                 </template>
             </Column>
             <Column field="lastLogin" header="Last Login" sortable sortField="user__last_login" style="min-width: 12rem"></Column>
-            <Column header="Actions" style="min-width: 12rem">
+            <Column header="Actions" style="min-width: 6rem">
                 <template #body="{ data }">
-                    <div class="flex gap-2">
-                        <Button icon="pi pi-shield" rounded outlined severity="warn" size="small" @click="openRoleDialog(data)" v-tooltip.top="'Change Role'" />
-                        <Button icon="pi pi-pencil" rounded outlined severity="info" size="small" @click="editUser(data)" />
-                        <Button icon="pi pi-trash" rounded outlined severity="danger" size="small" @click="confirmDelete(data)" />
-                    </div>
+                    <Button icon="pi pi-ellipsis-v" rounded text severity="secondary" size="small" @click="toggleActionMenu($event, data)" />
+                    <Menu ref="actionMenu" :model="getActionItems(selectedUser)" :popup="true" />
                 </template>
             </Column>
         </DataTable>
@@ -445,6 +616,172 @@ const saveRoleChange = async () => {
             <div class="flex justify-end gap-2">
                 <Button label="Cancel" icon="pi pi-times" severity="secondary" @click="roleDialog = false" />
                 <Button label="Save" icon="pi pi-check" @click="saveRoleChange" />
+            </div>
+        </template>
+    </Dialog>
+
+    <!-- Change Password Dialog -->
+    <Dialog v-model:visible="passwordDialog" header="Change Password" :modal="true" :style="{ width: '420px' }">
+        <form @submit.prevent="savePassword">
+            <div class="flex flex-col gap-4 mt-2">
+                <div class="text-sm text-muted-color">Changing password for <strong>{{ selectedUser?.firstName }} {{ selectedUser?.lastName }}</strong></div>
+                <div class="flex flex-col gap-2">
+                    <label class="font-medium">New Password *</label>
+                    <Password v-model="newPassword" :invalid="passwordSubmitted && (!newPassword || newPassword.length < 6)" placeholder="New password" :toggleMask="true" fluid :feedback="true" />
+                    <small v-if="passwordSubmitted && (!newPassword || newPassword.length < 6)" class="text-red-500">Password must be at least 6 characters.</small>
+                </div>
+                <div class="flex flex-col gap-2">
+                    <label class="font-medium">Confirm Password *</label>
+                    <Password v-model="confirmPassword" :invalid="passwordSubmitted && newPassword !== confirmPassword" placeholder="Confirm password" :toggleMask="true" fluid :feedback="false" />
+                    <small v-if="passwordSubmitted && newPassword !== confirmPassword" class="text-red-500">Passwords do not match.</small>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-6">
+                <Button label="Cancel" icon="pi pi-times" severity="secondary" @click="passwordDialog = false" type="button" />
+                <Button type="submit" label="Change Password" icon="pi pi-lock" />
+            </div>
+        </form>
+    </Dialog>
+
+    <!-- Add Media Dialog -->
+    <Dialog v-model:visible="mediaDialog" header="Add Media" :modal="true" :style="{ width: '600px' }">
+        <div class="flex flex-col gap-4 mt-2">
+            <div class="text-sm text-muted-color">Upload media for <strong>{{ selectedUser?.firstName }} {{ selectedUser?.lastName }}</strong></div>
+
+            <!-- Hidden file input -->
+            <input ref="mediaFileInput" type="file" multiple class="hidden" @change="onMediaFilesSelected" />
+
+            <!-- Upload button -->
+            <Button label="Choose Files" icon="pi pi-upload" severity="secondary" outlined @click="triggerMediaUpload" />
+
+            <!-- File list -->
+            <div v-if="mediaFiles.length > 0" class="flex flex-col gap-3">
+                <div v-for="(item, index) in mediaFiles" :key="index" class="flex items-start gap-3 p-3 border border-surface-200 dark:border-surface-700 rounded-lg">
+                    <div class="flex-1 flex flex-col gap-2">
+                        <div class="flex flex-col gap-1">
+                            <label class="text-xs font-medium text-muted-color">Name *</label>
+                            <InputText v-model="item.name" :invalid="mediaSubmitted && !item.name.trim()" placeholder="File name" size="small" />
+                            <small v-if="mediaSubmitted && !item.name.trim()" class="text-red-500">Name is required.</small>
+                        </div>
+                        <div class="text-xs text-muted-color flex gap-3">
+                            <span><i class="pi pi-file mr-1"></i>{{ item.originalName }}</span>
+                            <span>{{ item.type || 'unknown' }}</span>
+                            <span>{{ formatFileSize(item.size) }}</span>
+                        </div>
+                    </div>
+                    <Button icon="pi pi-trash" severity="danger" text rounded size="small" @click="removeMediaFile(index)" />
+                </div>
+            </div>
+            <div v-else-if="mediaSubmitted" class="text-sm text-red-500">Please select at least one file.</div>
+        </div>
+        <template #footer>
+            <div class="flex justify-end gap-2">
+                <Button label="Cancel" icon="pi pi-times" severity="secondary" @click="mediaDialog = false" />
+                <Button v-if="mediaFiles.length > 0" label="Save" icon="pi pi-check" @click="saveMedia" />
+            </div>
+        </template>
+    </Dialog>
+
+    <!-- View Profile Dialog -->
+    <Dialog v-model:visible="viewDialog" header="Profile Details" :modal="true" :style="{ width: '700px' }">
+        <div v-if="viewLoading" class="flex justify-center py-8">
+            <ProgressSpinner style="width: 50px; height: 50px" />
+        </div>
+        <div v-else-if="viewProfile" class="flex flex-col gap-6 mt-2">
+            <!-- Header: photo + name -->
+            <div class="flex items-center gap-4">
+                <img v-if="viewProfile.photo?.file_url" :src="viewProfile.photo.file_url" class="w-20 h-20 rounded-full object-cover" alt="photo" />
+                <div v-else class="w-20 h-20 rounded-full bg-surface-200 dark:bg-surface-700 flex items-center justify-center">
+                    <i class="pi pi-user text-3xl text-surface-500"></i>
+                </div>
+                <div>
+                    <div class="text-xl font-semibold">{{ viewProfile.first_name }} {{ viewProfile.last_name }}</div>
+                    <div class="text-sm text-muted-color">{{ viewProfile.email }}</div>
+                    <div class="flex gap-2 mt-1">
+                        <Tag :value="viewProfile.role" :severity="getRoleSeverity(viewProfile.role)" />
+                        <Tag :value="viewProfile.group" severity="info" />
+                        <Tag :value="viewProfile.status" :severity="viewProfile.status === 'Active' ? 'success' : 'secondary'" />
+                    </div>
+                </div>
+            </div>
+
+            <Divider />
+
+            <!-- Personal Info -->
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <div class="text-sm font-medium text-muted-color">Phone</div>
+                    <div>{{ viewProfile.phone || '—' }}</div>
+                </div>
+                <div>
+                    <div class="text-sm font-medium text-muted-color">Birthday</div>
+                    <div>{{ viewProfile.birthday || '—' }} <span v-if="viewAge !== null" class="text-muted-color">({{ viewAge }} years)</span></div>
+                </div>
+                <div>
+                    <div class="text-sm font-medium text-muted-color">Last Login</div>
+                    <div>{{ viewProfile.last_login ? new Date(viewProfile.last_login).toLocaleString() : 'Never' }}</div>
+                </div>
+            </div>
+
+            <!-- Address -->
+            <div v-if="viewProfile.address">
+                <div class="text-sm font-medium text-muted-color mb-1">Address</div>
+                <div>{{ [viewProfile.address.flat, viewProfile.address.street, viewProfile.address.suburb, viewProfile.address.state, viewProfile.address.postal_code, viewProfile.address.country].filter(Boolean).join(', ') || '—' }}</div>
+            </div>
+
+            <!-- Media -->
+            <div v-if="viewProfile.media && viewProfile.media.length > 0">
+                <Divider />
+                <div class="text-sm font-medium text-muted-color mb-2">Media ({{ viewProfile.media.length }})</div>
+                <div class="grid grid-cols-1 gap-2">
+                    <div v-for="m in viewProfile.media" :key="m.id" class="flex items-center justify-between p-3 border border-surface-200 dark:border-surface-700 rounded-lg">
+                        <div class="flex items-center gap-3">
+                            <!-- Image thumbnail -->
+                            <img v-if="m.mime_type && m.mime_type.startsWith('image/')" :src="m.file_url" :alt="m.name" class="w-12 h-12 rounded object-cover border border-surface-200 dark:border-surface-700 cursor-pointer" @click="openPreview(m)" />
+                            <!-- Non-image icon -->
+                            <div v-else class="w-12 h-12 rounded bg-surface-100 dark:bg-surface-800 flex items-center justify-center border border-surface-200 dark:border-surface-700">
+                                <i :class="['pi text-xl text-muted-color', m.file_type === 'pdf' ? 'pi-file-pdf' : m.file_type === 'video' ? 'pi-video' : m.file_type === 'audio' ? 'pi-volume-up' : 'pi-file']" />
+                            </div>
+                            <div>
+                                <div class="font-medium text-sm">{{ m.name }}</div>
+                                <div class="text-xs text-muted-color">{{ m.mime_type }} · {{ formatFileSize(m.size) }}</div>
+                            </div>
+                        </div>
+                        <div class="flex gap-1">
+                            <Button v-if="isPreviewable(m)" icon="pi pi-eye" severity="info" text rounded size="small" @click="openPreview(m)" v-tooltip.top="'View'" />
+                            <a :href="m.file_url" target="_blank" download>
+                                <Button icon="pi pi-download" severity="secondary" text rounded size="small" v-tooltip.top="'Download'" />
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div v-else>
+                <Divider />
+                <div class="text-sm text-muted-color">No media attached.</div>
+            </div>
+        </div>
+        <template #footer>
+            <Button label="Close" icon="pi pi-times" severity="secondary" @click="viewDialog = false" />
+        </template>
+    </Dialog>
+
+    <!-- File Preview Dialog -->
+    <Dialog v-model:visible="previewDialog" :header="previewName" :modal="true" :style="{ width: '80vw', maxWidth: '900px' }" :dismissableMask="true">
+        <div class="flex justify-center">
+            <img v-if="previewType === 'image'" :src="previewUrl" :alt="previewName" class="max-w-full max-h-[75vh] object-contain rounded" />
+            <iframe v-else-if="previewType === 'pdf'" :src="previewUrl" class="w-full rounded" style="height: 75vh; border: none;" />
+            <div v-else class="text-center py-12">
+                <i class="pi pi-file text-5xl text-muted-color mb-4"></i>
+                <p class="text-muted-color">Preview not available for this file type.</p>
+            </div>
+        </div>
+        <template #footer>
+            <div class="flex justify-end gap-2">
+                <a :href="previewUrl" target="_blank" download>
+                    <Button label="Download" icon="pi pi-download" severity="secondary" />
+                </a>
+                <Button label="Close" icon="pi pi-times" severity="secondary" @click="previewDialog = false" />
             </div>
         </template>
     </Dialog>

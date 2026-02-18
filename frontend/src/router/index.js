@@ -51,6 +51,11 @@ const router = createRouter({
                     component: () => import('@/views/Settings.vue')
                 },
                 {
+                    path: '/attendance',
+                    name: 'attendance',
+                    component: () => import('@/views/Attendance.vue')
+                },
+                {
                     path: '/qrcodes',
                     name: 'qrcodes',
                     component: () => import('@/views/QRCodes.vue')

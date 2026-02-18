@@ -51,4 +51,6 @@ class ProfileViewSet(viewsets.ModelViewSet):
         ct = ContentType.objects.get_for_model(Profile)
         media_qs = Media.objects.filter(content_type=ct, object_id=profile.pk).order_by('-created_at')
         profile_data['media'] = MediaSerializer(media_qs, many=True, context={'request': request}).data
+        profile_data['_content_type_id'] = ct.id
+        profile_data['_profile_id'] = profile.pk
         return Response(profile_data)
