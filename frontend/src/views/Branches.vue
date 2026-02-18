@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useToast } from 'primevue/usetoast';
 import api from '@/services/api';
-import { useGooglePlaces } from '@/composables/useGooglePlaces';
+import AddressField from '@/components/AddressField.vue';
 
 const toast = useToast();
 const loading = ref(false);
@@ -157,23 +157,6 @@ const clearFilters = () => {
     filterSuburb.value = '';
     currentPage.value = 1;
     fetchBranches();
-};
-
-// --- Google Places Autocomplete ---
-const { suggestions: addressSuggestions, search: searchPlaces, getPlaceDetails } = useGooglePlaces();
-
-const searchAddress = (event) => {
-    searchPlaces(event.query);
-};
-
-const onAddressSelect = async (event) => {
-    const selected = event.value;
-    if (selected && selected.placeId) {
-        const details = await getPlaceDetails(selected.placeId);
-        if (details) {
-            branch.value.address = { ...details };
-        }
-    }
 };
 
 // --- Branch CRUD ---
@@ -380,44 +363,7 @@ const formatAddress = (addr) => {
                     <small v-if="submitted && !branch.name.trim()" class="text-red-500">Branch name is required.</small>
                 </div>
 
-                <!-- Google Address Section -->
-                <div class="flex flex-col gap-4">
-                    <label class="font-medium">Address *</label>
-                    <AutoComplete v-model="branch.address.full" :suggestions="addressSuggestions" optionLabel="full" placeholder="Search address from Google..." @complete="searchAddress" @item-select="onAddressSelect" forceSelection:false class="w-full" />
-                    <small class="text-muted-color -mt-2"><i class="pi pi-map-marker mr-1"></i>Select from Google Places or fill manually below</small>
-
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="flex flex-col gap-2">
-                            <label class="text-sm">Flat / House No.</label>
-                            <InputText v-model="branch.address.flat" placeholder="Flat / House No." />
-                        </div>
-                        <div class="flex flex-col gap-2">
-                            <label class="text-sm">Street *</label>
-                            <InputText v-model="branch.address.street" :invalid="submitted && !branch.address.street.trim()" placeholder="Street" />
-                            <small v-if="submitted && !branch.address.street.trim()" class="text-red-500">Street is required.</small>
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="flex flex-col gap-2">
-                            <label class="text-sm">Suburb</label>
-                            <InputText v-model="branch.address.suburb" placeholder="Suburb" />
-                        </div>
-                        <div class="flex flex-col gap-2">
-                            <label class="text-sm">Postal Code</label>
-                            <InputText v-model="branch.address.postalCode" placeholder="Postal Code" />
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="flex flex-col gap-2">
-                            <label class="text-sm">State</label>
-                            <InputText v-model="branch.address.state" placeholder="State" />
-                        </div>
-                        <div class="flex flex-col gap-2">
-                            <label class="text-sm">Country</label>
-                            <InputText v-model="branch.address.country" placeholder="Country" />
-                        </div>
-                    </div>
-                </div>
+                <AddressField v-model="branch.address" :submitted="submitted" label="Address *" />
 
                 <div class="flex flex-col gap-2">
                     <label class="font-medium">Front Desk / Reception Number *</label>

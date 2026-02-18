@@ -1,19 +1,5 @@
-"""
-URL configuration for config project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/6.0/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework_simplejwt.views import (
@@ -23,6 +9,7 @@ from rest_framework_simplejwt.views import (
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from profiles.models import Profile
 
 
 @api_view(['GET'])
@@ -30,12 +17,16 @@ from rest_framework.response import Response
 def me(request):
     """Return the currently authenticated user's info."""
     user = request.user
+    profile, _ = Profile.objects.get_or_create(user=user)
     return Response({
         'id': user.id,
         'username': user.username,
         'email': user.email,
         'first_name': user.first_name,
         'last_name': user.last_name,
+        'role': profile.role,
+        'group': profile.group,
+        'status': profile.status,
     })
 
 
@@ -47,4 +38,9 @@ urlpatterns = [
     # App APIs
     path('api/', include('companies.urls')),
     path('api/', include('branches.urls')),
+    path('api/', include('profiles.urls')),
+    path('api/', include('media_library.urls')),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

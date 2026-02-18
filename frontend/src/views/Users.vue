@@ -1,15 +1,19 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useToast } from 'primevue/usetoast';
+import api from '@/services/api';
+import AddressField from '@/components/AddressField.vue';
 
 const toast = useToast();
+const loading = ref(false);
 
-const users = ref([
-    { id: 1, firstName: 'Admin', lastName: 'User', email: 'admin@security.io', role: 'Admin', group: 'Admin', status: 'Active', lastLogin: '2026-02-10 08:00:00', birthday: '1990-01-15', phone: '+1-212-555-0100', address: 'New York, NY', photo: null },
-    { id: 2, firstName: 'John', lastName: 'Doe', email: 'john.doe@security.io', role: 'Analyst', group: 'Analyst', status: 'Active', lastLogin: '2026-02-10 07:45:00', birthday: '1988-05-20', phone: '+1-415-555-0200', address: 'San Francisco, CA', photo: null },
-    { id: 3, firstName: 'Jane', lastName: 'Smith', email: 'jane.smith@security.io', role: 'Analyst', group: 'LPO', status: 'Active', lastLogin: '2026-02-09 16:00:00', birthday: '1992-08-10', phone: '+1-312-555-0300', address: 'Chicago, IL', photo: null },
-    { id: 4, firstName: 'Bob', lastName: 'Wilson', email: 'bob.wilson@security.io', role: 'Viewer', group: 'Viewer', status: 'Inactive', lastLogin: '2026-01-15 10:30:00', birthday: '1985-12-01', phone: '+1-713-555-0400', address: 'Houston, TX', photo: null }
-]);
+const users = ref([]);
+const totalRecords = ref(0);
+const currentPage = ref(1);
+const rowsPerPage = ref(10);
+const sortField = ref('user__first_name');
+const sortOrder = ref(1);
+const filterText = ref('');
 
 const userDialog = ref(false);
 const deleteDialog = ref(false);
@@ -33,17 +37,17 @@ const emptyUser = {
     password: '',
     birthday: null,
     phone: '',
-    address: '',
+    address: { full: '', flat: '', street: '', suburb: '', postalCode: '', state: '', country: '' },
     group: null,
     photo: null,
-    role: 'Viewer',
+    photoId: null,
+    role: 'LPO',
     status: 'Active'
 };
 const user = ref({ ...emptyUser });
 const selectedUser = ref(null);
 const photoPreview = ref(null);
-
-let nextId = 5;
+const photoFile = ref(null);
 
 const isValidPhone = (val) => /^[+]?[\d\s()-]{7,20}$/.test(val);
 const isValidEmail = (val) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
@@ -59,21 +63,111 @@ const age = computed(() => {
 });
 
 const getRoleSeverity = (role) => {
-    const map = { Admin: 'danger', Analyst: 'info', Viewer: 'secondary' };
+    const map = { Admin: 'danger', LPO: 'info' };
     return map[role] || 'secondary';
 };
 
+const formatDate = (date) => {
+    if (!date) return '';
+    const d = new Date(date);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+// --- Map API response to frontend shape ---
+const mapFromApi = (p) => ({
+    id: p.id,
+    firstName: p.first_name || '',
+    lastName: p.last_name || '',
+    email: p.email || '',
+    phone: p.phone || '',
+    birthday: p.birthday || null,
+    role: p.role || 'LPO',
+    group: p.group || 'Viewer',
+    status: p.status || 'Active',
+    lastLogin: p.last_login ? new Date(p.last_login).toLocaleString() : 'Never',
+    photo: p.photo?.file_url || null,
+    photoId: p.photo?.id || null,
+    address: p.address
+        ? {
+              full: [p.address.flat, p.address.street, p.address.suburb, p.address.state, p.address.postal_code, p.address.country].filter(Boolean).join(', '),
+              flat: p.address.flat || '',
+              street: p.address.street || '',
+              suburb: p.address.suburb || '',
+              postalCode: p.address.postal_code || '',
+              state: p.address.state || '',
+              country: p.address.country || ''
+          }
+        : { full: '', flat: '', street: '', suburb: '', postalCode: '', state: '', country: '' }
+});
+
+// --- Upload photo to /media/ endpoint, returns media ID ---
+const uploadPhoto = async (file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('file_type', 'photo');
+    const { data } = await api.post('/media/', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return data.id;
+};
+
+// --- Fetch users (server-side pagination, search, ordering) ---
+const fetchUsers = async () => {
+    loading.value = true;
+    try {
+        const params = { page: currentPage.value, page_size: rowsPerPage.value };
+        if (filterText.value.trim()) params.search = filterText.value.trim();
+        if (sortField.value) {
+            params.ordering = sortOrder.value === 1 ? sortField.value : `-${sortField.value}`;
+        }
+        const { data } = await api.get('/profiles/', { params });
+        users.value = (data.results || []).map(mapFromApi);
+        totalRecords.value = data.count || 0;
+    } catch {
+        toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load users.', life: 4000 });
+    } finally {
+        loading.value = false;
+    }
+};
+
+onMounted(fetchUsers);
+
+// --- Server-side event handlers ---
+const onPage = (event) => {
+    currentPage.value = event.page + 1;
+    rowsPerPage.value = event.rows;
+    fetchUsers();
+};
+
+const onSort = (event) => {
+    sortField.value = event.sortField;
+    sortOrder.value = event.sortOrder;
+    currentPage.value = 1;
+    fetchUsers();
+};
+
+let searchTimeout = null;
+const onSearch = () => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        currentPage.value = 1;
+        fetchUsers();
+    }, 400);
+};
+
 const openNew = () => {
-    user.value = { ...emptyUser };
+    user.value = { ...emptyUser, address: { ...emptyUser.address } };
     photoPreview.value = null;
+    photoFile.value = null;
     isEditing.value = false;
     submitted.value = false;
     userDialog.value = true;
 };
 
 const editUser = (data) => {
-    user.value = { ...data, birthday: data.birthday ? new Date(data.birthday) : null, password: '' };
+    user.value = { ...data, address: { ...data.address }, birthday: data.birthday ? new Date(data.birthday) : null, password: '' };
     photoPreview.value = data.photo;
+    photoFile.value = null;
     isEditing.value = true;
     submitted.value = false;
     userDialog.value = true;
@@ -87,10 +181,10 @@ const confirmDelete = (data) => {
 const onPhotoSelect = (event) => {
     const file = event.files?.[0];
     if (file) {
+        photoFile.value = file;
         const reader = new FileReader();
         reader.onload = (e) => {
             photoPreview.value = e.target.result;
-            user.value.photo = e.target.result;
         };
         reader.readAsDataURL(file);
     }
@@ -98,10 +192,12 @@ const onPhotoSelect = (event) => {
 
 const onPhotoRemove = () => {
     photoPreview.value = null;
+    photoFile.value = null;
     user.value.photo = null;
+    user.value.photoId = null;
 };
 
-const saveUser = () => {
+const saveUser = async () => {
     submitted.value = true;
 
     if (!user.value.firstName.trim() || !user.value.lastName.trim()) return;
@@ -113,35 +209,63 @@ const saveUser = () => {
 
     const fullName = `${user.value.firstName} ${user.value.lastName}`;
 
-    if (isEditing.value) {
-        const idx = users.value.findIndex((u) => u.id === user.value.id);
-        if (idx !== -1) {
-            users.value[idx] = {
-                ...user.value,
-                birthday: user.value.birthday ? formatDate(user.value.birthday) : null
-            };
+    try {
+        // Upload photo first if a new file was selected
+        let photoId = user.value.photoId || null;
+        if (photoFile.value) {
+            photoId = await uploadPhoto(photoFile.value);
         }
-        toast.add({ severity: 'success', summary: 'Updated', detail: `${fullName} updated.`, life: 3000 });
-    } else {
-        user.value.id = nextId++;
-        user.value.lastLogin = 'Never';
-        users.value.push({
-            ...user.value,
-            birthday: user.value.birthday ? formatDate(user.value.birthday) : null
-        });
-        toast.add({ severity: 'success', summary: 'Created', detail: `${fullName} created.`, life: 3000 });
+
+        const payload = {
+            first_name: user.value.firstName,
+            last_name: user.value.lastName,
+            email: user.value.email,
+            phone: user.value.phone || '',
+            birthday: user.value.birthday ? formatDate(user.value.birthday) : null,
+            role: user.value.role || 'LPO',
+            group: user.value.group || 'Viewer',
+            status: user.value.status || 'Active',
+            photo_id: photoId,
+            address: {
+                flat: user.value.address.flat || '',
+                street: user.value.address.street || '',
+                suburb: user.value.address.suburb || '',
+                postal_code: user.value.address.postalCode || '',
+                state: user.value.address.state || '',
+                country: user.value.address.country || ''
+            }
+        };
+        if (user.value.password) payload.password = user.value.password;
+
+        if (isEditing.value) {
+            await api.put(`/profiles/${user.value.id}/`, payload);
+            toast.add({ severity: 'success', summary: 'Updated', detail: `${fullName} updated.`, life: 3000 });
+        } else {
+            await api.post('/profiles/', payload);
+            toast.add({ severity: 'success', summary: 'Created', detail: `${fullName} created.`, life: 3000 });
+        }
+
+        userDialog.value = false;
+        fetchUsers();
+    } catch (err) {
+        const detail = err.response?.data?.email?.[0] || err.response?.data?.detail || 'Failed to save user.';
+        toast.add({ severity: 'error', summary: 'Error', detail, life: 4000 });
     }
-    userDialog.value = false;
 };
 
-const deleteUserConfirmed = () => {
-    users.value = users.value.filter((u) => u.id !== selectedUser.value.id);
-    deleteDialog.value = false;
-    selectedUser.value = null;
-    toast.add({ severity: 'success', summary: 'Deleted', detail: 'User deleted.', life: 3000 });
+const deleteUserConfirmed = async () => {
+    try {
+        await api.delete(`/profiles/${selectedUser.value.id}/`);
+        deleteDialog.value = false;
+        selectedUser.value = null;
+        toast.add({ severity: 'success', summary: 'Deleted', detail: 'User deleted.', life: 3000 });
+        fetchUsers();
+    } catch {
+        toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to delete user.', life: 4000 });
+    }
 };
 
-const roleOptions = ['Admin', 'Analyst', 'Viewer'];
+const roleOptions = ['Admin', 'LPO'];
 const selectedRoleUser = ref(null);
 const selectedNewRole = ref(null);
 
@@ -151,20 +275,16 @@ const openRoleDialog = (data) => {
     roleDialog.value = true;
 };
 
-const saveRoleChange = () => {
+const saveRoleChange = async () => {
     if (!selectedNewRole.value) return;
-    const idx = users.value.findIndex((u) => u.id === selectedRoleUser.value.id);
-    if (idx !== -1) {
-        users.value[idx].role = selectedNewRole.value;
-        toast.add({ severity: 'success', summary: 'Role Updated', detail: `${users.value[idx].firstName} ${users.value[idx].lastName} is now ${selectedNewRole.value}.`, life: 3000 });
+    try {
+        await api.patch(`/profiles/${selectedRoleUser.value.id}/role/`, { role: selectedNewRole.value });
+        toast.add({ severity: 'success', summary: 'Role Updated', detail: `${selectedRoleUser.value.firstName} ${selectedRoleUser.value.lastName} is now ${selectedNewRole.value}.`, life: 3000 });
+        roleDialog.value = false;
+        fetchUsers();
+    } catch {
+        toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to update role.', life: 4000 });
     }
-    roleDialog.value = false;
-};
-
-const formatDate = (date) => {
-    if (!date) return '';
-    const d = new Date(date);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 </script>
 
@@ -172,11 +292,14 @@ const formatDate = (date) => {
     <Toast />
     <div class="card">
         <div class="font-semibold text-xl mb-4">User Management</div>
-        <DataTable :value="users" :paginator="true" :rows="10" dataKey="id" :rowHover="true" responsiveLayout="scroll">
+        <DataTable :value="users" :paginator="true" :rows="rowsPerPage" :totalRecords="totalRecords" :loading="loading" :lazy="true" dataKey="id" :rowHover="true" responsiveLayout="scroll" @page="onPage" @sort="onSort">
             <template #header>
                 <div class="flex justify-between items-center">
                     <span class="text-xl text-surface-900 dark:text-surface-0 font-bold">Users</span>
-                    <Button label="Add User" icon="pi pi-plus" size="small" @click="openNew" />
+                    <div class="flex gap-2">
+                        <InputText v-model="filterText" placeholder="Search users..." @input="onSearch" class="w-64" />
+                        <Button label="Add User" icon="pi pi-plus" size="small" @click="openNew" />
+                    </div>
                 </div>
             </template>
             <template #empty> No users found. </template>
@@ -188,22 +311,22 @@ const formatDate = (date) => {
                     </div>
                 </template>
             </Column>
-            <Column header="Name" sortable style="min-width: 12rem">
+            <Column header="Name" sortable sortField="user__first_name" style="min-width: 12rem">
                 <template #body="{ data }">{{ data.firstName }} {{ data.lastName }}</template>
             </Column>
-            <Column field="email" header="Email" sortable style="min-width: 14rem"></Column>
-            <Column field="role" header="Role" sortable style="min-width: 8rem">
+            <Column field="email" header="Email" sortable sortField="user__email" style="min-width: 14rem"></Column>
+            <Column field="role" header="Role" sortable sortField="role" style="min-width: 8rem">
                 <template #body="{ data }">
                     <Tag :value="data.role" :severity="getRoleSeverity(data.role)" />
                 </template>
             </Column>
-            <Column field="group" header="Group" sortable style="min-width: 8rem"></Column>
-            <Column field="status" header="Status" sortable style="min-width: 8rem">
+            <Column field="group" header="Group" sortable sortField="group" style="min-width: 8rem"></Column>
+            <Column field="status" header="Status" sortable sortField="status" style="min-width: 8rem">
                 <template #body="{ data }">
                     <Tag :value="data.status" :severity="data.status === 'Active' ? 'success' : 'secondary'" />
                 </template>
             </Column>
-            <Column field="lastLogin" header="Last Login" sortable style="min-width: 12rem"></Column>
+            <Column field="lastLogin" header="Last Login" sortable sortField="user__last_login" style="min-width: 12rem"></Column>
             <Column header="Actions" style="min-width: 12rem">
                 <template #body="{ data }">
                     <div class="flex gap-2">
@@ -279,11 +402,7 @@ const formatDate = (date) => {
                     <small v-else-if="submitted && !isValidPhone(user.phone)" class="text-red-500">Enter a valid phone number.</small>
                 </div>
 
-                <div class="flex flex-col gap-2">
-                    <label class="font-medium">Address</label>
-                    <InputText v-model="user.address" placeholder="Search location..." />
-                    <small class="text-muted-color"><i class="pi pi-map-marker mr-1"></i>Google Places integration — enter address manually for now</small>
-                </div>
+                <AddressField v-model="user.address" :submitted="submitted" label="Address" :requireStreet="false" />
 
                 <div class="flex flex-col gap-2">
                     <label class="font-medium">Group *</label>
