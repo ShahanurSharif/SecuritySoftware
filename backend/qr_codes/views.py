@@ -1,3 +1,7 @@
+import io
+import json
+import qrcode as qrcode_lib
+from django.http import HttpResponse
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -23,6 +27,22 @@ class QRCodeViewSet(viewsets.ModelViewSet):
             user=request.user,
         )
         return Response(QRCodeSubmissionSerializer(submission).data, status=201)
+
+    @action(detail=True, methods=['get'], url_path='image')
+    def qr_image(self, request, pk=None):
+        """Generate and return the QR code as a PNG image."""
+        qr_obj = self.get_object()
+        data = json.dumps({
+            'qr_id': qr_obj.id,
+            'area': qr_obj.area_name,
+            'branch': qr_obj.branch.name,
+            'branch_id': qr_obj.branch.id,
+        })
+        img = qrcode_lib.make(data, box_size=10, border=2)
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        buf.seek(0)
+        return HttpResponse(buf.getvalue(), content_type='image/png')
 
 
 class QRCodeSubmissionViewSet(viewsets.ReadOnlyModelViewSet):

@@ -1,7 +1,6 @@
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useToast } from 'primevue/usetoast';
-import QRCodeLib from 'qrcode';
 import api from '@/services/api';
 
 const toast = useToast();
@@ -28,7 +27,6 @@ const submitted = ref(false);
 const emptyQR = { id: null, branch: null, area_name: '', status: 'Active' };
 const qr = ref({ ...emptyQR });
 const selectedQR = ref(null);
-const qrCanvasRef = ref(null);
 const qrImageUrl = ref('');
 
 // Company filter for branch select
@@ -178,35 +176,32 @@ const openViewQR = async (data) => {
     selectedQR.value = data;
     qrImageUrl.value = '';
     viewQRDialog.value = true;
-
-    // Generate QR code. The data encoded is the QR code ID so the scanner can submit with it.
-    const qrContent = JSON.stringify({
-        qr_id: data.id,
-        area: data.area_name,
-        branch: data.branch_name
-    });
-
     try {
-        qrImageUrl.value = await QRCodeLib.toDataURL(qrContent, {
-            width: 400,
-            margin: 2,
-            color: { dark: '#000000', light: '#ffffff' }
-        });
+        const { data: blob } = await api.get(`/qrcodes/${data.id}/image/`, { responseType: 'blob' });
+        qrImageUrl.value = URL.createObjectURL(blob);
     } catch {
-        toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to generate QR code.', life: 4000 });
+        toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load QR code image.', life: 4000 });
     }
 };
 
-const downloadQR = () => {
-    if (!qrImageUrl.value) return;
-    const link = document.createElement('a');
-    link.download = `QR-${selectedQR.value.area_name}-${selectedQR.value.id}.png`;
-    link.href = qrImageUrl.value;
-    link.click();
+const downloadQR = async () => {
+    if (!selectedQR.value) return;
+    try {
+        const { data } = await api.get(`/qrcodes/${selectedQR.value.id}/image/`, { responseType: 'blob' });
+        const url = URL.createObjectURL(data);
+        const link = document.createElement('a');
+        link.download = `QR-${selectedQR.value.area_name}-${selectedQR.value.id}.png`;
+        link.href = url;
+        link.click();
+        URL.revokeObjectURL(url);
+    } catch {
+        toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to download QR code.', life: 4000 });
+    }
 };
 
 const printQR = () => {
-    if (!qrImageUrl.value) return;
+    if (!selectedQR.value) return;
+    const imgUrl = qrImageUrl.value;
     const win = window.open('', '_blank');
     win.document.write(`
         <html>
@@ -221,8 +216,7 @@ const printQR = () => {
         <body>
             <h2>${selectedQR.value.area_name}</h2>
             <p>${selectedQR.value.branch_name} — ${selectedQR.value.company_name}</p>
-            <img src="${qrImageUrl.value}" alt="QR Code" />
-            <script>window.onload = () => { window.print(); }<\/script>
+            <img src="${imgUrl}" alt="QR Code" onload="window.print()" />
         </body>
         </html>
     `);
