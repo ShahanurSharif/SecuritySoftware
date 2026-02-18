@@ -13,6 +13,7 @@ const users = ref([
 
 const userDialog = ref(false);
 const deleteDialog = ref(false);
+const roleDialog = ref(false);
 const isEditing = ref(false);
 const submitted = ref(false);
 
@@ -140,6 +141,26 @@ const deleteUserConfirmed = () => {
     toast.add({ severity: 'success', summary: 'Deleted', detail: 'User deleted.', life: 3000 });
 };
 
+const roleOptions = ['Admin', 'Analyst', 'Viewer'];
+const selectedRoleUser = ref(null);
+const selectedNewRole = ref(null);
+
+const openRoleDialog = (data) => {
+    selectedRoleUser.value = data;
+    selectedNewRole.value = data.role;
+    roleDialog.value = true;
+};
+
+const saveRoleChange = () => {
+    if (!selectedNewRole.value) return;
+    const idx = users.value.findIndex((u) => u.id === selectedRoleUser.value.id);
+    if (idx !== -1) {
+        users.value[idx].role = selectedNewRole.value;
+        toast.add({ severity: 'success', summary: 'Role Updated', detail: `${users.value[idx].firstName} ${users.value[idx].lastName} is now ${selectedNewRole.value}.`, life: 3000 });
+    }
+    roleDialog.value = false;
+};
+
 const formatDate = (date) => {
     if (!date) return '';
     const d = new Date(date);
@@ -183,9 +204,10 @@ const formatDate = (date) => {
                 </template>
             </Column>
             <Column field="lastLogin" header="Last Login" sortable style="min-width: 12rem"></Column>
-            <Column header="Actions" style="min-width: 10rem">
+            <Column header="Actions" style="min-width: 12rem">
                 <template #body="{ data }">
                     <div class="flex gap-2">
+                        <Button icon="pi pi-shield" rounded outlined severity="warn" size="small" @click="openRoleDialog(data)" v-tooltip.top="'Change Role'" />
                         <Button icon="pi pi-pencil" rounded outlined severity="info" size="small" @click="editUser(data)" />
                         <Button icon="pi pi-trash" rounded outlined severity="danger" size="small" @click="confirmDelete(data)" />
                     </div>
@@ -287,6 +309,23 @@ const formatDate = (date) => {
             <div class="flex justify-end gap-2">
                 <Button label="No" icon="pi pi-times" severity="secondary" @click="deleteDialog = false" />
                 <Button label="Yes" icon="pi pi-check" severity="danger" @click="deleteUserConfirmed" />
+            </div>
+        </template>
+    </Dialog>
+
+    <!-- Role Change Dialog -->
+    <Dialog v-model:visible="roleDialog" header="Change Role" :modal="true" :style="{ width: '400px' }">
+        <div class="flex flex-col gap-4 mt-2">
+            <div class="text-sm text-muted-color">Changing role for <strong>{{ selectedRoleUser?.firstName }} {{ selectedRoleUser?.lastName }}</strong></div>
+            <div class="flex flex-col gap-2">
+                <label class="font-medium">Role</label>
+                <Select v-model="selectedNewRole" :options="roleOptions" placeholder="Select role" />
+            </div>
+        </div>
+        <template #footer>
+            <div class="flex justify-end gap-2">
+                <Button label="Cancel" icon="pi pi-times" severity="secondary" @click="roleDialog = false" />
+                <Button label="Save" icon="pi pi-check" @click="saveRoleChange" />
             </div>
         </template>
     </Dialog>

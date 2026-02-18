@@ -1,41 +1,19 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useToast } from 'primevue/usetoast';
+import api from '@/services/api';
+import { useGooglePlaces } from '@/composables/useGooglePlaces';
 
 const toast = useToast();
+const loading = ref(false);
 
-const companies = ref([
-    { id: 1, name: 'SecureCorp Ltd.' },
-    { id: 2, name: 'CyberShield Inc.' }
-]);
-
-const branches = ref([
-    {
-        id: 1,
-        companyId: 1,
-        companyName: 'SecureCorp Ltd.',
-        name: 'Downtown Branch',
-        address: { full: '789 Broadway, New York, NY 10003', flat: '789', street: 'Broadway', suburb: 'NoHo', postalCode: '10003', state: 'NY', country: 'US' },
-        managerNumber: '+1-212-555-0301',
-        storeNumber: 'STR-001',
-        staff: [
-            { id: 1, name: 'Alice Johnson', designation: 'Security Analyst', number: '+1-212-555-1001', email: 'alice@securecorp.com' },
-            { id: 2, name: 'Bob Martinez', designation: 'Guard', number: '+1-212-555-1002', email: 'bob@securecorp.com' }
-        ]
-    },
-    {
-        id: 2,
-        companyId: 2,
-        companyName: 'CyberShield Inc.',
-        name: 'Bay Area Office',
-        address: { full: '321 Mission St, San Francisco, CA 94105', flat: '321', street: 'Mission St', suburb: 'SoMa', postalCode: '94105', state: 'CA', country: 'US' },
-        managerNumber: '+1-415-555-0401',
-        storeNumber: 'STR-002',
-        staff: [
-            { id: 1, name: 'Carol Lee', designation: 'Branch Manager', number: '+1-415-555-2001', email: 'carol@cybershield.com' }
-        ]
-    }
-]);
+const companies = ref([]);
+const branches = ref([]);
+const totalRecords = ref(0);
+const currentPage = ref(1);
+const rowsPerPage = ref(10);
+const sortField = ref('name');
+const sortOrder = ref(1);
 
 const branchDialog = ref(false);
 const deleteDialog = ref(false);
@@ -66,25 +44,109 @@ const showStaffPanel = ref(false);
 const viewStaffBranchId = ref(null);
 const viewStaffBranch = computed(() => branches.value.find((b) => b.id === viewStaffBranchId.value));
 
-let nextId = 3;
-let nextStaffId = 10;
-
 const isValidPhone = (val) => /^[+]?[\d\s()-]{7,20}$/.test(val);
 const isValidEmail = (val) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
 
-// --- Filtered branches ---
-const filteredBranches = computed(() => {
-    return branches.value.filter((b) => {
-        if (filterCompany.value && b.companyId !== filterCompany.value) return false;
-        if (filterBranchName.value && !b.name.toLowerCase().includes(filterBranchName.value.toLowerCase())) return false;
-        if (filterPhone.value && !b.managerNumber.toLowerCase().includes(filterPhone.value.toLowerCase())) return false;
-        const addrStr = [b.address.full, b.address.flat, b.address.street, b.address.suburb, b.address.postalCode, b.address.state, b.address.country].filter(Boolean).join(' ').toLowerCase();
-        if (filterAddress.value && !addrStr.includes(filterAddress.value.toLowerCase())) return false;
-        if (filterState.value && !(b.address.state || '').toLowerCase().includes(filterState.value.toLowerCase())) return false;
-        if (filterSuburb.value && !(b.address.suburb || '').toLowerCase().includes(filterSuburb.value.toLowerCase())) return false;
-        return true;
-    });
+// --- Helpers: map API ↔ frontend ---
+const mapFromApi = (b) => ({
+    id: b.id,
+    companyId: b.company,
+    companyName: b.company_name || '',
+    name: b.name,
+    address: {
+        full: [b.address.flat, b.address.street, b.address.suburb, b.address.state, b.address.postal_code, b.address.country].filter(Boolean).join(', '),
+        flat: b.address.flat || '',
+        street: b.address.street || '',
+        suburb: b.address.suburb || '',
+        postalCode: b.address.postal_code || '',
+        state: b.address.state || '',
+        country: b.address.country || ''
+    },
+    managerNumber: b.front_desk_number || '',
+    storeNumber: b.store_number || '',
+    staff: (b.staff || []).map((s) => ({ id: s.id, name: s.name, designation: s.designation, number: s.phone, email: s.email || '' }))
 });
+
+const mapToApi = (b) => ({
+    company: b.companyId,
+    name: b.name,
+    address: {
+        flat: b.address.flat,
+        street: b.address.street,
+        suburb: b.address.suburb,
+        postal_code: b.address.postalCode,
+        state: b.address.state,
+        country: b.address.country
+    },
+    front_desk_number: b.managerNumber,
+    store_number: b.storeNumber,
+    staff: b.staff.map((s) => ({ name: s.name, designation: s.designation, phone: s.number, email: s.email }))
+});
+
+// --- Fetch ---
+const fetchCompanies = async () => {
+    try {
+        const { data } = await api.get('/companies/lite/');
+        companies.value = data;
+    } catch {
+        toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load companies.', life: 4000 });
+    }
+};
+
+const fetchBranches = async () => {
+    loading.value = true;
+    try {
+        const params = {
+            page: currentPage.value,
+            page_size: rowsPerPage.value
+        };
+        // Filters
+        if (filterCompany.value) params.company = filterCompany.value;
+        // Build search string from remaining text filters
+        const searchParts = [filterBranchName.value, filterPhone.value, filterAddress.value, filterState.value, filterSuburb.value].filter((v) => v.trim());
+        if (searchParts.length) params.search = searchParts.join(' ');
+        // Sorting
+        if (sortField.value) {
+            const fieldMap = { name: 'name', companyName: 'company__name', managerNumber: 'front_desk_number', storeNumber: 'store_number' };
+            const apiField = fieldMap[sortField.value] || sortField.value;
+            params.ordering = sortOrder.value === 1 ? apiField : `-${apiField}`;
+        }
+        const { data } = await api.get('/branches/', { params });
+        branches.value = (data.results || []).map(mapFromApi);
+        totalRecords.value = data.count || 0;
+    } catch {
+        toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load branches.', life: 4000 });
+    } finally {
+        loading.value = false;
+    }
+};
+
+onMounted(async () => {
+    await Promise.all([fetchCompanies(), fetchBranches()]);
+});
+
+// --- Server-side event handlers ---
+const onPage = (event) => {
+    currentPage.value = event.page + 1;
+    rowsPerPage.value = event.rows;
+    fetchBranches();
+};
+
+const onSort = (event) => {
+    sortField.value = event.sortField;
+    sortOrder.value = event.sortOrder;
+    currentPage.value = 1;
+    fetchBranches();
+};
+
+let searchTimeout = null;
+const onFilterChange = () => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        currentPage.value = 1;
+        fetchBranches();
+    }, 400);
+};
 
 const clearFilters = () => {
     filterCompany.value = null;
@@ -93,25 +155,24 @@ const clearFilters = () => {
     filterAddress.value = '';
     filterState.value = '';
     filterSuburb.value = '';
+    currentPage.value = 1;
+    fetchBranches();
 };
 
-// --- Google Places autocomplete stub ---
-const addressSuggestions = ref([]);
+// --- Google Places Autocomplete ---
+const { suggestions: addressSuggestions, search: searchPlaces, getPlaceDetails } = useGooglePlaces();
 
 const searchAddress = (event) => {
-    const query = event.query;
-    // TODO: Replace with real Google Places API call
-    setTimeout(() => {
-        addressSuggestions.value = [
-            { full: `${query}, Suburb, State 00000, Country`, flat: '', street: query, suburb: 'Suburb', postalCode: '00000', state: 'State', country: 'Country' }
-        ];
-    }, 300);
+    searchPlaces(event.query);
 };
 
-const onAddressSelect = (event) => {
+const onAddressSelect = async (event) => {
     const selected = event.value;
-    if (selected && typeof selected === 'object') {
-        branch.value.address = { ...selected };
+    if (selected && selected.placeId) {
+        const details = await getPlaceDetails(selected.placeId);
+        if (details) {
+            branch.value.address = { ...details };
+        }
     }
 };
 
@@ -135,32 +196,40 @@ const confirmDelete = (data) => {
     deleteDialog.value = true;
 };
 
-const saveBranch = () => {
+const saveBranch = async () => {
     submitted.value = true;
 
     if (!branch.value.companyId || !branch.value.name.trim() || !branch.value.address.street.trim() || !branch.value.managerNumber.trim() || !branch.value.storeNumber.trim()) return;
     if (!isValidPhone(branch.value.managerNumber)) return;
 
-    const comp = companies.value.find((c) => c.id === branch.value.companyId);
-    branch.value.companyName = comp ? comp.name : '';
+    const payload = mapToApi(branch.value);
 
-    if (isEditing.value) {
-        const idx = branches.value.findIndex((b) => b.id === branch.value.id);
-        if (idx !== -1) branches.value[idx] = { ...branch.value, address: { ...branch.value.address }, staff: branch.value.staff.map((s) => ({ ...s })) };
-        toast.add({ severity: 'success', summary: 'Updated', detail: 'Branch updated successfully.', life: 3000 });
-    } else {
-        branch.value.id = nextId++;
-        branches.value.push({ ...branch.value, address: { ...branch.value.address }, staff: branch.value.staff.map((s) => ({ ...s })) });
-        toast.add({ severity: 'success', summary: 'Created', detail: 'Branch created successfully.', life: 3000 });
+    try {
+        if (isEditing.value) {
+            await api.put(`/branches/${branch.value.id}/`, payload);
+            toast.add({ severity: 'success', summary: 'Updated', detail: 'Branch updated successfully.', life: 3000 });
+        } else {
+            await api.post('/branches/', payload);
+            toast.add({ severity: 'success', summary: 'Created', detail: 'Branch created successfully.', life: 3000 });
+        }
+        branchDialog.value = false;
+        await fetchBranches();
+    } catch (err) {
+        const detail = err.response?.data?.name?.[0] || err.response?.data?.detail || 'Failed to save branch.';
+        toast.add({ severity: 'error', summary: 'Error', detail, life: 4000 });
     }
-    branchDialog.value = false;
 };
 
-const deleteBranchConfirmed = () => {
-    branches.value = branches.value.filter((b) => b.id !== selectedBranch.value.id);
-    deleteDialog.value = false;
-    selectedBranch.value = null;
-    toast.add({ severity: 'success', summary: 'Deleted', detail: 'Branch deleted.', life: 3000 });
+const deleteBranchConfirmed = async () => {
+    try {
+        await api.delete(`/branches/${selectedBranch.value.id}/`);
+        deleteDialog.value = false;
+        selectedBranch.value = null;
+        toast.add({ severity: 'success', summary: 'Deleted', detail: 'Branch deleted.', life: 3000 });
+        await fetchBranches();
+    } catch {
+        toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to delete branch.', life: 4000 });
+    }
 };
 
 // --- Staff CRUD ---
@@ -188,7 +257,7 @@ const confirmDeleteStaff = (s) => {
     deleteStaffDialog.value = true;
 };
 
-const saveStaff = () => {
+const saveStaff = async () => {
     staffSubmitted.value = true;
 
     if (!staffMember.value.name.trim() || !staffMember.value.designation.trim() || !staffMember.value.number.trim()) return;
@@ -198,24 +267,46 @@ const saveStaff = () => {
     const br = branches.value.find((b) => b.id === viewStaffBranchId.value);
     if (!br) return;
 
+    // Update local staff list first
     if (isEditingStaff.value) {
         const idx = br.staff.findIndex((s) => s.id === staffMember.value.id);
         if (idx !== -1) br.staff[idx] = { ...staffMember.value };
-        toast.add({ severity: 'success', summary: 'Updated', detail: 'Staff member updated.', life: 3000 });
     } else {
-        staffMember.value.id = nextStaffId++;
-        br.staff.push({ ...staffMember.value });
-        toast.add({ severity: 'success', summary: 'Added', detail: 'Staff member added.', life: 3000 });
+        br.staff.push({ ...staffMember.value, id: null });
     }
-    staffDialog.value = false;
+
+    // Persist via branch update
+    try {
+        const payload = mapToApi(br);
+        await api.put(`/branches/${br.id}/`, payload);
+        staffDialog.value = false;
+        toast.add({ severity: 'success', summary: isEditingStaff.value ? 'Updated' : 'Added', detail: `Staff member ${isEditingStaff.value ? 'updated' : 'added'}.`, life: 3000 });
+        await fetchBranches();
+        // Re-point the staff panel to refreshed data
+        viewStaffBranchId.value = br.id;
+    } catch {
+        toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to save staff member.', life: 4000 });
+        await fetchBranches();
+    }
 };
 
-const deleteStaffConfirmed = () => {
+const deleteStaffConfirmed = async () => {
     const br = branches.value.find((b) => b.id === viewStaffBranchId.value);
-    if (br) br.staff = br.staff.filter((s) => s.id !== selectedStaff.value.id);
-    deleteStaffDialog.value = false;
-    selectedStaff.value = null;
-    toast.add({ severity: 'success', summary: 'Deleted', detail: 'Staff member removed.', life: 3000 });
+    if (br) {
+        br.staff = br.staff.filter((s) => s.id !== selectedStaff.value.id);
+        try {
+            const payload = mapToApi(br);
+            await api.put(`/branches/${br.id}/`, payload);
+            deleteStaffDialog.value = false;
+            selectedStaff.value = null;
+            toast.add({ severity: 'success', summary: 'Deleted', detail: 'Staff member removed.', life: 3000 });
+            await fetchBranches();
+            viewStaffBranchId.value = br.id;
+        } catch {
+            toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to remove staff member.', life: 4000 });
+            await fetchBranches();
+        }
+    }
 };
 
 const formatAddress = (addr) => {
@@ -231,18 +322,18 @@ const formatAddress = (addr) => {
 
         <!-- Filter Bar -->
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
-            <Select v-model="filterCompany" :options="companies" optionLabel="name" optionValue="id" placeholder="Company" :showClear="true" class="w-full" />
-            <InputText v-model="filterBranchName" placeholder="Branch Name" class="w-full" />
-            <InputText v-model="filterPhone" placeholder="Phone" class="w-full" />
-            <InputText v-model="filterAddress" placeholder="Address" class="w-full" />
-            <InputText v-model="filterState" placeholder="State" class="w-full" />
+            <Select v-model="filterCompany" :options="companies" optionLabel="name" optionValue="id" placeholder="Company" :showClear="true" class="w-full" @change="onFilterChange" />
+            <InputText v-model="filterBranchName" placeholder="Branch Name" class="w-full" @input="onFilterChange" />
+            <InputText v-model="filterPhone" placeholder="Phone" class="w-full" @input="onFilterChange" />
+            <InputText v-model="filterAddress" placeholder="Address" class="w-full" @input="onFilterChange" />
+            <InputText v-model="filterState" placeholder="State" class="w-full" @input="onFilterChange" />
             <div class="flex gap-2">
-                <InputText v-model="filterSuburb" placeholder="Suburb" class="w-full" />
+                <InputText v-model="filterSuburb" placeholder="Suburb" class="w-full" @input="onFilterChange" />
                 <Button icon="pi pi-filter-slash" severity="secondary" outlined @click="clearFilters" v-tooltip.top="'Clear filters'" />
             </div>
         </div>
 
-        <DataTable :value="filteredBranches" :paginator="true" :rows="10" dataKey="id" :rowHover="true" responsiveLayout="scroll">
+        <DataTable :value="branches" :paginator="true" :rows="rowsPerPage" :totalRecords="totalRecords" :lazy="true" :loading="loading" :rowHover="true" :rowsPerPageOptions="[10, 25, 50]" dataKey="id" responsiveLayout="scroll" @page="onPage" @sort="onSort" :sortField="sortField" :sortOrder="sortOrder">
             <template #header>
                 <div class="flex justify-between items-center">
                     <span class="text-xl text-surface-900 dark:text-surface-0 font-bold">Branches</span>

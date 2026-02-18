@@ -15,10 +15,10 @@ const branches = ref([
 ]);
 
 const qrCodes = ref([
-    { id: 1, name: 'Main Entrance', location: 'Building A — Front Door', companyId: 1, companyName: 'SecureCorp Ltd.', branchId: 1, branchName: 'Downtown Branch', createdAt: '2026-02-01 09:00:00', status: 'Active' },
-    { id: 2, name: 'Parking Level 1', location: 'Building A — Basement P1', companyId: 1, companyName: 'SecureCorp Ltd.', branchId: 1, branchName: 'Downtown Branch', createdAt: '2026-02-01 09:15:00', status: 'Active' },
-    { id: 3, name: 'Server Room', location: 'Building B — Floor 3', companyId: 2, companyName: 'CyberShield Inc.', branchId: 2, branchName: 'Bay Area Office', createdAt: '2026-02-05 14:30:00', status: 'Active' },
-    { id: 4, name: 'Emergency Exit North', location: 'Building A — North Wing', companyId: 1, companyName: 'SecureCorp Ltd.', branchId: 1, branchName: 'Downtown Branch', createdAt: '2026-02-07 11:00:00', status: 'Inactive' }
+    { id: 1, name: 'Main Entrance', companyId: 1, companyName: 'SecureCorp Ltd.', branchId: 1, branchName: 'Downtown Branch', createdAt: '2026-02-01 09:00:00', status: 'Active' },
+    { id: 2, name: 'Parking Level 1', companyId: 1, companyName: 'SecureCorp Ltd.', branchId: 1, branchName: 'Downtown Branch', createdAt: '2026-02-01 09:15:00', status: 'Active' },
+    { id: 3, name: 'Server Room', companyId: 2, companyName: 'CyberShield Inc.', branchId: 2, branchName: 'Bay Area Office', createdAt: '2026-02-05 14:30:00', status: 'Active' },
+    { id: 4, name: 'Emergency Exit North', companyId: 1, companyName: 'SecureCorp Ltd.', branchId: 1, branchName: 'Downtown Branch', createdAt: '2026-02-07 11:00:00', status: 'Inactive' }
 ]);
 
 const qrDialog = ref(false);
@@ -37,7 +37,7 @@ const onCompanyChange = () => {
     qr.value.branchName = '';
 };
 
-const emptyQR = { id: null, name: '', location: '', companyId: null, companyName: '', branchId: null, branchName: '', status: 'Active' };
+const emptyQR = { id: null, name: '', companyId: null, companyName: '', branchId: null, branchName: '', status: 'Active' };
 const qr = ref({ ...emptyQR });
 const selectedQR = ref(null);
 
@@ -47,7 +47,7 @@ const filteredQRCodes = computed(() => {
     if (!filterText.value.trim()) return qrCodes.value;
     const q = filterText.value.toLowerCase();
     return qrCodes.value.filter((item) => {
-        return item.name.toLowerCase().includes(q) || item.location.toLowerCase().includes(q) || item.companyName.toLowerCase().includes(q) || item.branchName.toLowerCase().includes(q);
+        return item.name.toLowerCase().includes(q) || item.companyName.toLowerCase().includes(q) || item.branchName.toLowerCase().includes(q);
     });
 });
 
@@ -73,7 +73,7 @@ const confirmDelete = (data) => {
 const saveQR = () => {
     submitted.value = true;
 
-    if (!qr.value.name.trim() || !qr.value.location.trim() || !qr.value.companyId || !qr.value.branchId) return;
+    if (!qr.value.name.trim() || !qr.value.companyId || !qr.value.branchId || !qr.value.status) return;
 
     const comp = companies.value.find((c) => c.id === qr.value.companyId);
     const br = branches.value.find((b) => b.id === qr.value.branchId);
@@ -114,7 +114,7 @@ const getStatusSeverity = (status) => {
         <div class="mb-4">
             <IconField>
                 <InputIcon class="pi pi-search" />
-                <InputText v-model="filterText" placeholder="Search by name, location, branch..." class="w-full" />
+                <InputText v-model="filterText" placeholder="Search by name, company, branch..." class="w-full" />
             </IconField>
         </div>
 
@@ -127,7 +127,6 @@ const getStatusSeverity = (status) => {
             </template>
             <template #empty> No QR codes found. </template>
             <Column field="name" header="Name" sortable style="min-width: 14rem"></Column>
-            <Column field="location" header="Location" sortable style="min-width: 16rem"></Column>
             <Column field="companyName" header="Company" sortable style="min-width: 12rem"></Column>
             <Column field="branchName" header="Branch" sortable style="min-width: 12rem"></Column>
             <Column field="status" header="Status" sortable style="min-width: 8rem">
@@ -165,12 +164,6 @@ const getStatusSeverity = (status) => {
                 </div>
 
                 <div class="flex flex-col gap-2">
-                    <label class="font-medium">Location *</label>
-                    <InputText v-model="qr.location" :invalid="submitted && !qr.location.trim()" placeholder="e.g. Building A — Front Door" />
-                    <small v-if="submitted && !qr.location.trim()" class="text-red-500">Location is required.</small>
-                </div>
-
-                <div class="flex flex-col gap-2">
                     <label class="font-medium">Company *</label>
                     <Select v-model="qr.companyId" :options="companies" optionLabel="name" optionValue="id" placeholder="Select a company" :invalid="submitted && !qr.companyId" @change="onCompanyChange" />
                     <small v-if="submitted && !qr.companyId" class="text-red-500">Company is required.</small>
@@ -183,8 +176,9 @@ const getStatusSeverity = (status) => {
                 </div>
 
                 <div class="flex flex-col gap-2">
-                    <label class="font-medium">Status</label>
-                    <Select v-model="qr.status" :options="['Active', 'Inactive']" placeholder="Select status" />
+                    <label class="font-medium">Status *</label>
+                    <Select v-model="qr.status" :options="['Active', 'Inactive']" placeholder="Select status" :invalid="submitted && !qr.status" />
+                    <small v-if="submitted && !qr.status" class="text-red-500">Status is required.</small>
                 </div>
             </div>
 

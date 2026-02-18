@@ -1,30 +1,18 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useToast } from 'primevue/usetoast';
+import api from '@/services/api';
+import { useGooglePlaces } from '@/composables/useGooglePlaces';
 
 const toast = useToast();
+const loading = ref(false);
 
-const companies = ref([
-    {
-        id: 1,
-        name: 'SecureCorp Ltd.',
-        email: 'info@securecorp.com',
-        address: { full: '123 Main St, New York, NY 10001', flat: '123', street: 'Main St', suburb: 'Manhattan', postalCode: '10001', state: 'NY', country: 'US' },
-        phones: [
-            { id: 1, number: '+1-212-555-0100', label: 'Main Office' },
-            { id: 2, number: '+1-212-555-0101', label: 'Reception' }
-        ],
-        description: 'Headquarters company for security operations'
-    },
-    {
-        id: 2,
-        name: 'CyberShield Inc.',
-        email: 'contact@cybershield.com',
-        address: { full: '456 Market Ave, San Francisco, CA 94102', flat: '456', street: 'Market Ave', suburb: 'SoMa', postalCode: '94102', state: 'CA', country: 'US' },
-        phones: [{ id: 1, number: '+1-415-555-0200', label: 'Head Office' }],
-        description: 'West coast security division'
-    }
-]);
+const companies = ref([]);
+const totalRecords = ref(0);
+const currentPage = ref(1);
+const rowsPerPage = ref(10);
+const sortField = ref('name');
+const sortOrder = ref(1);
 
 const companyDialog = ref(false);
 const deleteDialog = ref(false);
@@ -46,43 +34,105 @@ const phone = ref({ ...emptyPhone });
 const selectedPhone = ref(null);
 const isEditingPhone = ref(false);
 
-let nextId = 3;
-let nextPhoneId = 10;
-
 const isValidPhone = (val) => /^[+]?[\d\s()-]{7,20}$/.test(val);
 const isValidEmail = (val) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
 
-// --- Filter ---
-const filteredCompanies = computed(() => {
-    if (!filterText.value.trim()) return companies.value;
-    const q = filterText.value.toLowerCase();
-    return companies.value.filter((c) => {
-        const addrStr = [c.address.full, c.address.flat, c.address.street, c.address.suburb, c.address.postalCode, c.address.state, c.address.country].filter(Boolean).join(' ').toLowerCase();
-        const phoneStr = c.phones.map((p) => p.number).join(' ').toLowerCase();
-        return c.name.toLowerCase().includes(q) || addrStr.includes(q) || phoneStr.includes(q);
-    });
+// --- Helpers: map between API snake_case ↔ frontend camelCase ---
+const mapFromApi = (c) => ({
+    id: c.id,
+    name: c.name,
+    email: c.email,
+    description: c.description || '',
+    address: {
+        full: [c.address.flat, c.address.street, c.address.suburb, c.address.state, c.address.postal_code, c.address.country].filter(Boolean).join(', '),
+        flat: c.address.flat || '',
+        street: c.address.street || '',
+        suburb: c.address.suburb || '',
+        postalCode: c.address.postal_code || '',
+        state: c.address.state || '',
+        country: c.address.country || ''
+    },
+    phones: (c.phones || []).map((p) => ({ id: p.id, number: p.number, label: p.label || '' }))
 });
 
-// --- Google Places autocomplete stub ---
-const addressSuggestions = ref([]);
-const searchingAddress = ref(false);
+const mapToApi = (c) => ({
+    name: c.name,
+    email: c.email,
+    description: c.description,
+    address: {
+        flat: c.address.flat,
+        street: c.address.street,
+        suburb: c.address.suburb,
+        postal_code: c.address.postalCode,
+        state: c.address.state,
+        country: c.address.country
+    },
+    phones: c.phones.map((p) => ({ number: p.number, label: p.label }))
+});
 
-const searchAddress = (event) => {
-    const query = event.query;
-    searchingAddress.value = true;
-    // TODO: Replace with real Google Places API call
-    setTimeout(() => {
-        addressSuggestions.value = [
-            { full: `${query}, Suburb, State 00000, Country`, flat: '', street: query, suburb: 'Suburb', postalCode: '00000', state: 'State', country: 'Country' }
-        ];
-        searchingAddress.value = false;
-    }, 300);
+// --- Fetch companies from API (server-side pagination, search, ordering) ---
+const fetchCompanies = async () => {
+    loading.value = true;
+    try {
+        const params = {
+            page: currentPage.value,
+            page_size: rowsPerPage.value
+        };
+        if (filterText.value.trim()) params.search = filterText.value.trim();
+        if (sortField.value) {
+            const fieldMap = { name: 'name', email: 'email' };
+            const apiField = fieldMap[sortField.value] || sortField.value;
+            params.ordering = sortOrder.value === 1 ? apiField : `-${apiField}`;
+        }
+        const { data } = await api.get('/companies/', { params });
+        companies.value = (data.results || []).map(mapFromApi);
+        totalRecords.value = data.count || 0;
+    } catch {
+        toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load companies.', life: 4000 });
+    } finally {
+        loading.value = false;
+    }
 };
 
-const onAddressSelect = (event) => {
+onMounted(fetchCompanies);
+
+// --- Server-side event handlers ---
+const onPage = (event) => {
+    currentPage.value = event.page + 1;
+    rowsPerPage.value = event.rows;
+    fetchCompanies();
+};
+
+const onSort = (event) => {
+    sortField.value = event.sortField;
+    sortOrder.value = event.sortOrder;
+    currentPage.value = 1;
+    fetchCompanies();
+};
+
+let searchTimeout = null;
+const onSearch = () => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        currentPage.value = 1;
+        fetchCompanies();
+    }, 400);
+};
+
+// --- Google Places Autocomplete ---
+const { suggestions: addressSuggestions, loading: searchingAddress, search: searchPlaces, getPlaceDetails } = useGooglePlaces();
+
+const searchAddress = (event) => {
+    searchPlaces(event.query);
+};
+
+const onAddressSelect = async (event) => {
     const selected = event.value;
-    if (selected && typeof selected === 'object') {
-        company.value.address = { ...selected };
+    if (selected && selected.placeId) {
+        const details = await getPlaceDetails(selected.placeId);
+        if (details) {
+            company.value.address = { ...details };
+        }
     }
 };
 
@@ -106,30 +156,41 @@ const confirmDelete = (data) => {
     deleteDialog.value = true;
 };
 
-const saveCompany = () => {
+const saveCompany = async () => {
     submitted.value = true;
 
     if (!company.value.name.trim()) return;
     if (!company.value.email.trim() || !isValidEmail(company.value.email)) return;
     if (!company.value.address.street.trim()) return;
 
-    if (isEditing.value) {
-        const idx = companies.value.findIndex((c) => c.id === company.value.id);
-        if (idx !== -1) companies.value[idx] = { ...company.value, address: { ...company.value.address }, phones: company.value.phones.map((p) => ({ ...p })) };
-        toast.add({ severity: 'success', summary: 'Updated', detail: 'Company updated successfully.', life: 3000 });
-    } else {
-        company.value.id = nextId++;
-        companies.value.push({ ...company.value, address: { ...company.value.address }, phones: company.value.phones.map((p) => ({ ...p })) });
-        toast.add({ severity: 'success', summary: 'Created', detail: 'Company created successfully.', life: 3000 });
+    const payload = mapToApi(company.value);
+
+    try {
+        if (isEditing.value) {
+            await api.put(`/companies/${company.value.id}/`, payload);
+            toast.add({ severity: 'success', summary: 'Updated', detail: 'Company updated successfully.', life: 3000 });
+        } else {
+            await api.post('/companies/', payload);
+            toast.add({ severity: 'success', summary: 'Created', detail: 'Company created successfully.', life: 3000 });
+        }
+        companyDialog.value = false;
+        await fetchCompanies();
+    } catch (err) {
+        const detail = err.response?.data?.name?.[0] || err.response?.data?.detail || 'Failed to save company.';
+        toast.add({ severity: 'error', summary: 'Error', detail, life: 4000 });
     }
-    companyDialog.value = false;
 };
 
-const deleteCompanyConfirmed = () => {
-    companies.value = companies.value.filter((c) => c.id !== selectedCompany.value.id);
-    deleteDialog.value = false;
-    selectedCompany.value = null;
-    toast.add({ severity: 'success', summary: 'Deleted', detail: 'Company deleted.', life: 3000 });
+const deleteCompanyConfirmed = async () => {
+    try {
+        await api.delete(`/companies/${selectedCompany.value.id}/`);
+        deleteDialog.value = false;
+        selectedCompany.value = null;
+        toast.add({ severity: 'success', summary: 'Deleted', detail: 'Company deleted.', life: 3000 });
+        await fetchCompanies();
+    } catch {
+        toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to delete company.', life: 4000 });
+    }
 };
 
 // --- Phone CRUD ---
@@ -162,7 +223,7 @@ const savePhone = () => {
         if (idx !== -1) company.value.phones[idx] = { ...phone.value };
         toast.add({ severity: 'success', summary: 'Updated', detail: 'Phone updated.', life: 3000 });
     } else {
-        phone.value.id = nextPhoneId++;
+        phone.value.id = Date.now();
         company.value.phones.push({ ...phone.value });
         toast.add({ severity: 'success', summary: 'Added', detail: 'Phone added.', life: 3000 });
     }
@@ -191,11 +252,11 @@ const formatAddress = (addr) => {
         <div class="mb-4">
             <IconField>
                 <InputIcon class="pi pi-search" />
-                <InputText v-model="filterText" placeholder="Search by name, address, phone number..." class="w-full" />
+                <InputText v-model="filterText" placeholder="Search by name, address, phone number..." class="w-full" @input="onSearch" />
             </IconField>
         </div>
 
-        <DataTable :value="filteredCompanies" :paginator="true" :rows="10" dataKey="id" :rowHover="true" responsiveLayout="scroll">
+        <DataTable :value="companies" :paginator="true" :rows="rowsPerPage" :totalRecords="totalRecords" :lazy="true" :loading="loading" :rowHover="true" :rowsPerPageOptions="[10, 25, 50]" dataKey="id" responsiveLayout="scroll" @page="onPage" @sort="onSort" :sortField="sortField" :sortOrder="sortOrder">
             <template #header>
                 <div class="flex justify-between items-center">
                     <span class="text-xl text-surface-900 dark:text-surface-0 font-bold">Companies</span>
