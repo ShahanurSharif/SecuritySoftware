@@ -190,7 +190,7 @@ const downloadQR = async () => {
         const { data } = await api.get(`/qrcodes/${selectedQR.value.id}/image/`, { responseType: 'blob' });
         const url = URL.createObjectURL(data);
         const link = document.createElement('a');
-        link.download = `QR-${selectedQR.value.area_name}-${selectedQR.value.id}.png`;
+        link.download = `${selectedQR.value.area_name}.png`;
         link.href = url;
         link.click();
         URL.revokeObjectURL(url);
@@ -355,8 +355,6 @@ const onCompanyChange = () => {
             <div v-else class="flex justify-center py-8">
                 <ProgressSpinner style="width: 50px; height: 50px" />
             </div>
-
-            <div class="text-xs text-muted-color">ID: {{ selectedQR.id }}</div>
         </div>
         <template #footer>
             <div class="flex justify-end gap-2">
