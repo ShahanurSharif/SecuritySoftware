@@ -84,9 +84,13 @@ const fetchHistory = async () => {
     }
 };
 
-const applyFilters = () => {
-    currentPage.value = 1;
-    fetchHistory();
+let filterTimeout = null;
+const onFilterChange = () => {
+    clearTimeout(filterTimeout);
+    filterTimeout = setTimeout(() => {
+        currentPage.value = 1;
+        fetchHistory();
+    }, 400);
 };
 
 const clearFilters = () => {
@@ -227,15 +231,14 @@ const clearResult = () => {
                 <div class="font-semibold text-xl mb-4">Scan History</div>
 
                 <!-- Filters -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-                    <Select v-model="filterUser" :options="users" optionLabel="label" optionValue="value" placeholder="Scanned By" showClear filter class="w-full" />
-                    <Select v-model="filterBranch" :options="branches" optionLabel="label" optionValue="value" placeholder="Branch" showClear filter class="w-full" />
-                    <InputText v-model="filterArea" placeholder="Area" class="w-full" />
-                    <DatePicker v-model="filterDateFrom" placeholder="Date From" dateFormat="yy-mm-dd" showIcon class="w-full" />
-                    <DatePicker v-model="filterDateTo" placeholder="Date To" dateFormat="yy-mm-dd" showIcon class="w-full" />
-                    <div class="flex gap-2">
-                        <Button label="Filter" icon="pi pi-filter" @click="applyFilters" class="flex-1" />
-                        <Button label="Clear" icon="pi pi-filter-slash" severity="secondary" outlined @click="clearFilters" />
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+                    <Select v-model="filterUser" :options="users" optionLabel="label" optionValue="value" placeholder="Scanned By" showClear filter class="w-full" @change="onFilterChange" />
+                    <Select v-model="filterBranch" :options="branches" optionLabel="label" optionValue="value" placeholder="Branch" showClear filter class="w-full" @change="onFilterChange" />
+                    <InputText v-model="filterArea" placeholder="Area" class="w-full" @input="onFilterChange" />
+                    <DatePicker v-model="filterDateFrom" placeholder="Date From" dateFormat="yy-mm-dd" showIcon class="w-full" @date-select="onFilterChange" @clear-click="onFilterChange" />
+                    <DatePicker v-model="filterDateTo" placeholder="Date To" dateFormat="yy-mm-dd" showIcon class="w-full" @date-select="onFilterChange" @clear-click="onFilterChange" />
+                    <div class="flex items-end">
+                        <Button icon="pi pi-filter-slash" severity="secondary" outlined @click="clearFilters" v-tooltip.top="'Clear filters'" />
                     </div>
                 </div>
 

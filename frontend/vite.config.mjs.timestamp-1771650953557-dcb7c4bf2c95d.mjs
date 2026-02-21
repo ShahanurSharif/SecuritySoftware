@@ -1,0 +1,36 @@
+// vite.config.mjs
+import { fileURLToPath, URL } from "node:url";
+import { PrimeVueResolver } from "file:///Users/shahanurmdsharif/development/python/security/SecuritySoftware/frontend/node_modules/@primevue/auto-import-resolver/index.mjs";
+import tailwindcss from "file:///Users/shahanurmdsharif/development/python/security/SecuritySoftware/frontend/node_modules/@tailwindcss/vite/dist/index.mjs";
+import vue from "file:///Users/shahanurmdsharif/development/python/security/SecuritySoftware/frontend/node_modules/@vitejs/plugin-vue/dist/index.mjs";
+import Components from "file:///Users/shahanurmdsharif/development/python/security/SecuritySoftware/frontend/node_modules/unplugin-vue-components/dist/vite.js";
+import { defineConfig } from "file:///Users/shahanurmdsharif/development/python/security/SecuritySoftware/frontend/node_modules/vite/dist/node/index.js";
+var __vite_injected_original_import_meta_url = "file:///Users/shahanurmdsharif/development/python/security/SecuritySoftware/frontend/vite.config.mjs";
+var vite_config_default = defineConfig({
+  optimizeDeps: {
+    noDiscovery: true
+  },
+  plugins: [
+    vue(),
+    tailwindcss(),
+    Components({
+      resolvers: [PrimeVueResolver()]
+    })
+  ],
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", __vite_injected_original_import_meta_url))
+    }
+  },
+  css: {
+    preprocessorOptions: {
+      scss: {
+        api: "modern-compiler"
+      }
+    }
+  }
+});
+export {
+  vite_config_default as default
+};
+//# sourceMappingURL=data:application/json;base64,ewogICJ2ZXJzaW9uIjogMywKICAic291cmNlcyI6IFsidml0ZS5jb25maWcubWpzIl0sCiAgInNvdXJjZXNDb250ZW50IjogWyJjb25zdCBfX3ZpdGVfaW5qZWN0ZWRfb3JpZ2luYWxfZGlybmFtZSA9IFwiL1VzZXJzL3NoYWhhbnVybWRzaGFyaWYvZGV2ZWxvcG1lbnQvcHl0aG9uL3NlY3VyaXR5L1NlY3VyaXR5U29mdHdhcmUvZnJvbnRlbmRcIjtjb25zdCBfX3ZpdGVfaW5qZWN0ZWRfb3JpZ2luYWxfZmlsZW5hbWUgPSBcIi9Vc2Vycy9zaGFoYW51cm1kc2hhcmlmL2RldmVsb3BtZW50L3B5dGhvbi9zZWN1cml0eS9TZWN1cml0eVNvZnR3YXJlL2Zyb250ZW5kL3ZpdGUuY29uZmlnLm1qc1wiO2NvbnN0IF9fdml0ZV9pbmplY3RlZF9vcmlnaW5hbF9pbXBvcnRfbWV0YV91cmwgPSBcImZpbGU6Ly8vVXNlcnMvc2hhaGFudXJtZHNoYXJpZi9kZXZlbG9wbWVudC9weXRob24vc2VjdXJpdHkvU2VjdXJpdHlTb2Z0d2FyZS9mcm9udGVuZC92aXRlLmNvbmZpZy5tanNcIjtpbXBvcnQgeyBmaWxlVVJMVG9QYXRoLCBVUkwgfSBmcm9tICdub2RlOnVybCc7XG5cbmltcG9ydCB7IFByaW1lVnVlUmVzb2x2ZXIgfSBmcm9tICdAcHJpbWV2dWUvYXV0by1pbXBvcnQtcmVzb2x2ZXInO1xuaW1wb3J0IHRhaWx3aW5kY3NzIGZyb20gJ0B0YWlsd2luZGNzcy92aXRlJztcbmltcG9ydCB2dWUgZnJvbSAnQHZpdGVqcy9wbHVnaW4tdnVlJztcbmltcG9ydCBDb21wb25lbnRzIGZyb20gJ3VucGx1Z2luLXZ1ZS1jb21wb25lbnRzL3ZpdGUnO1xuaW1wb3J0IHsgZGVmaW5lQ29uZmlnIH0gZnJvbSAndml0ZSc7XG5cbi8vIGh0dHBzOi8vdml0ZWpzLmRldi9jb25maWcvXG5leHBvcnQgZGVmYXVsdCBkZWZpbmVDb25maWcoe1xuICAgIG9wdGltaXplRGVwczoge1xuICAgICAgICBub0Rpc2NvdmVyeTogdHJ1ZVxuICAgIH0sXG4gICAgcGx1Z2luczogW1xuICAgICAgICB2dWUoKSxcbiAgICAgICAgdGFpbHdpbmRjc3MoKSxcbiAgICAgICAgQ29tcG9uZW50cyh7XG4gICAgICAgICAgICByZXNvbHZlcnM6IFtQcmltZVZ1ZVJlc29sdmVyKCldXG4gICAgICAgIH0pXG4gICAgXSxcbiAgICByZXNvbHZlOiB7XG4gICAgICAgIGFsaWFzOiB7XG4gICAgICAgICAgICAnQCc6IGZpbGVVUkxUb1BhdGgobmV3IFVSTCgnLi9zcmMnLCBpbXBvcnQubWV0YS51cmwpKVxuICAgICAgICB9XG4gICAgfSxcbiAgICBjc3M6IHtcbiAgICAgICAgcHJlcHJvY2Vzc29yT3B0aW9uczoge1xuICAgICAgICAgICAgc2Nzczoge1xuICAgICAgICAgICAgICAgIGFwaTogJ21vZGVybi1jb21waWxlcidcbiAgICAgICAgICAgIH1cbiAgICAgICAgfVxuICAgIH1cbn0pO1xuIl0sCiAgIm1hcHBpbmdzIjogIjtBQUEyWixTQUFTLGVBQWUsV0FBVztBQUU5YixTQUFTLHdCQUF3QjtBQUNqQyxPQUFPLGlCQUFpQjtBQUN4QixPQUFPLFNBQVM7QUFDaEIsT0FBTyxnQkFBZ0I7QUFDdkIsU0FBUyxvQkFBb0I7QUFOc08sSUFBTSwyQ0FBMkM7QUFTcFQsSUFBTyxzQkFBUSxhQUFhO0FBQUEsRUFDeEIsY0FBYztBQUFBLElBQ1YsYUFBYTtBQUFBLEVBQ2pCO0FBQUEsRUFDQSxTQUFTO0FBQUEsSUFDTCxJQUFJO0FBQUEsSUFDSixZQUFZO0FBQUEsSUFDWixXQUFXO0FBQUEsTUFDUCxXQUFXLENBQUMsaUJBQWlCLENBQUM7QUFBQSxJQUNsQyxDQUFDO0FBQUEsRUFDTDtBQUFBLEVBQ0EsU0FBUztBQUFBLElBQ0wsT0FBTztBQUFBLE1BQ0gsS0FBSyxjQUFjLElBQUksSUFBSSxTQUFTLHdDQUFlLENBQUM7QUFBQSxJQUN4RDtBQUFBLEVBQ0o7QUFBQSxFQUNBLEtBQUs7QUFBQSxJQUNELHFCQUFxQjtBQUFBLE1BQ2pCLE1BQU07QUFBQSxRQUNGLEtBQUs7QUFBQSxNQUNUO0FBQUEsSUFDSjtBQUFBLEVBQ0o7QUFDSixDQUFDOyIsCiAgIm5hbWVzIjogW10KfQo=
