@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'branches',
     'profiles',
     'qr_codes',
+    'attendance',
 ]
 
 MIDDLEWARE = [

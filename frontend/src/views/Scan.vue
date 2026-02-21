@@ -20,6 +20,31 @@ const sortField = ref('scanned_at');
 const sortOrder = ref(-1);
 const historyLoading = ref(false);
 
+// --- Filters ---
+const users = ref([]);
+const branches = ref([]);
+const filterUser = ref(null);
+const filterBranch = ref(null);
+const filterArea = ref('');
+const filterDateFrom = ref(null);
+const filterDateTo = ref(null);
+
+const fetchFilterOptions = async () => {
+    try {
+        const [uRes, bRes] = await Promise.all([api.get('/profiles/', { params: { page_size: 1000 } }), api.get('/branches/', { params: { page_size: 1000 } })]);
+        users.value = (uRes.data.results || uRes.data).map((p) => ({
+            label: `${p.first_name || ''} ${p.last_name || ''}`.trim() || `User ${p.id}`,
+            value: p.id
+        }));
+        branches.value = (bRes.data.results || bRes.data).map((b) => ({
+            label: b.name,
+            value: b.id
+        }));
+    } catch {
+        // silent
+    }
+};
+
 const apiSortMap = {
     qr_area_name: 'qr_code__area_name',
     qr_branch_name: 'qr_code__branch__name',
@@ -33,6 +58,22 @@ const fetchHistory = async () => {
         const params = { page: currentPage.value, page_size: rowsPerPage.value };
         const key = apiSortMap[sortField.value] || sortField.value;
         params.ordering = (sortOrder.value === -1 ? '-' : '') + key;
+
+        // Apply filters
+        if (filterUser.value) params.scanned_by = filterUser.value;
+        if (filterBranch.value) params.branch = filterBranch.value;
+        if (filterArea.value.trim()) params.area = filterArea.value.trim();
+        if (filterDateFrom.value) {
+            const d = new Date(filterDateFrom.value);
+            d.setHours(0, 0, 0, 0);
+            params.scanned_after = d.toISOString();
+        }
+        if (filterDateTo.value) {
+            const d = new Date(filterDateTo.value);
+            d.setHours(23, 59, 59, 999);
+            params.scanned_before = d.toISOString();
+        }
+
         const { data } = await api.get('/qrcode-submissions/', { params });
         scanHistory.value = data.results;
         totalRecords.value = data.count;
@@ -43,7 +84,23 @@ const fetchHistory = async () => {
     }
 };
 
+const applyFilters = () => {
+    currentPage.value = 1;
+    fetchHistory();
+};
+
+const clearFilters = () => {
+    filterUser.value = null;
+    filterBranch.value = null;
+    filterArea.value = '';
+    filterDateFrom.value = null;
+    filterDateTo.value = null;
+    currentPage.value = 1;
+    fetchHistory();
+};
+
 onMounted(() => {
+    fetchFilterOptions();
     fetchHistory();
 });
 
@@ -168,6 +225,20 @@ const clearResult = () => {
         <div class="lg:col-span-2">
             <div class="card">
                 <div class="font-semibold text-xl mb-4">Scan History</div>
+
+                <!-- Filters -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                    <Select v-model="filterUser" :options="users" optionLabel="label" optionValue="value" placeholder="Scanned By" showClear filter class="w-full" />
+                    <Select v-model="filterBranch" :options="branches" optionLabel="label" optionValue="value" placeholder="Branch" showClear filter class="w-full" />
+                    <InputText v-model="filterArea" placeholder="Area" class="w-full" />
+                    <DatePicker v-model="filterDateFrom" placeholder="Date From" dateFormat="yy-mm-dd" showIcon class="w-full" />
+                    <DatePicker v-model="filterDateTo" placeholder="Date To" dateFormat="yy-mm-dd" showIcon class="w-full" />
+                    <div class="flex gap-2">
+                        <Button label="Filter" icon="pi pi-filter" @click="applyFilters" class="flex-1" />
+                        <Button label="Clear" icon="pi pi-filter-slash" severity="secondary" outlined @click="clearFilters" />
+                    </div>
+                </div>
+
                 <DataTable
                     :value="scanHistory"
                     :paginator="true"

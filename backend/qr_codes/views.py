@@ -2,11 +2,25 @@ import io
 import json
 import qrcode as qrcode_lib
 from django.http import HttpResponse
+from django_filters import rest_framework as django_filters
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import QRCode, QRCodeSubmission
 from .serializers import QRCodeSerializer, QRCodeSubmissionSerializer
+
+
+class QRCodeSubmissionFilter(django_filters.FilterSet):
+    """Custom filter supporting date range, branch, area, and user."""
+    scanned_after = django_filters.DateTimeFilter(field_name='scanned_at', lookup_expr='gte')
+    scanned_before = django_filters.DateTimeFilter(field_name='scanned_at', lookup_expr='lte')
+    branch = django_filters.NumberFilter(field_name='qr_code__branch')
+    area = django_filters.CharFilter(field_name='qr_code__area_name', lookup_expr='icontains')
+    scanned_by = django_filters.NumberFilter(field_name='user')
+
+    class Meta:
+        model = QRCodeSubmission
+        fields = ['qr_code', 'user', 'branch', 'area', 'scanned_by', 'scanned_after', 'scanned_before']
 
 
 class QRCodeViewSet(viewsets.ModelViewSet):
@@ -54,4 +68,4 @@ class QRCodeSubmissionViewSet(viewsets.ReadOnlyModelViewSet):
     search_fields = ['qr_code__area_name', 'qr_code__branch__name', 'user__first_name', 'user__last_name']
     ordering_fields = ['scanned_at', 'qr_code__area_name']
     ordering = ['-scanned_at']
-    filterset_fields = ['qr_code', 'user']
+    filterset_class = QRCodeSubmissionFilter
