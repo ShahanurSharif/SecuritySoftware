@@ -50,6 +50,11 @@ const model = ref([
                 label: 'Scan',
                 icon: 'pi pi-fw pi-camera',
                 to: '/scan'
+            },
+            {
+                label: 'Reports',
+                icon: 'pi pi-fw pi-file',
+                to: '/reports'
             }
         ]
     },

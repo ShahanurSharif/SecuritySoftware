@@ -24,9 +24,10 @@ def me(request):
         'email': user.email,
         'first_name': user.first_name,
         'last_name': user.last_name,
-        'role': profile.role,
+        'role': 'Admin' if user.is_superuser else profile.role,
         'group': profile.group,
         'status': profile.status,
+        'is_superuser': user.is_superuser,
     })
 
 
@@ -43,6 +44,7 @@ urlpatterns = [
     path('api/', include('qr_codes.urls')),
     path('api/', include('attendance.urls')),
     path('api/', include('roster.urls')),
+    path('api/', include('reports.urls')),
 ]
 
 if settings.DEBUG:

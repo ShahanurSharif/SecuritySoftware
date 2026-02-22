@@ -398,6 +398,14 @@ class AvailabilityViewSet(viewsets.ModelViewSet):
 
         if preset in PRESET_TIMES:
             start_time, end_time = PRESET_TIMES[preset]
+        elif preset == 'from_time':
+            start_time = request.data.get('start_time')
+            if not start_time:
+                return Response(
+                    {'error': 'start_time required for from_time preset'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            end_time = '23:59'
         else:
             start_time = request.data.get('start_time')
             end_time = request.data.get('end_time')

@@ -2,7 +2,7 @@
 
 <template>
     <div class="layout-footer">
-        SecuritySoftware — Powered by
-        <a href="https://primevue.org" target="_blank" rel="noopener noreferrer" class="text-primary font-bold hover:underline">PrimeVue</a>
+        Developed by
+        <a href="https://www.linkedin.com/in/shahanursharif" target="_blank" rel="noopener noreferrer" class="text-primary font-bold hover:underline">Shan</a>
     </div>
 </template>

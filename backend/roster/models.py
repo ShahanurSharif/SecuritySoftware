@@ -131,12 +131,14 @@ class Availability(models.Model):
         ('whole_day', 'Whole Day'),
         ('day_only', 'Day Only'),
         ('night_only', 'Night Only'),
+        ('from_time', 'From Time'),
         ('custom', 'Custom'),
     ]
     PRESET_TIMES = {
         'whole_day': ('00:00', '23:59'),
         'day_only': ('06:00', '18:00'),
         'night_only': ('18:00', '06:00'),
+        # from_time: start_time provided by user, end_time always 23:59
     }
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='availabilities')
