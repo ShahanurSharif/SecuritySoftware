@@ -67,6 +67,11 @@ const model = ref([
                 to: '/branches'
             },
             {
+                label: 'Roster',
+                icon: 'pi pi-fw pi-calendar',
+                to: '/roster'
+            },
+            {
                 label: 'Users',
                 icon: 'pi pi-fw pi-users',
                 to: '/users'

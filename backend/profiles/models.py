@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from branches.models import Branch
 from media_library.models import Media
 
 
@@ -48,6 +49,10 @@ class Profile(models.Model):
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='LPO')
     group = models.CharField(max_length=20, choices=GROUP_CHOICES, default='Viewer')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Active')
+    preferred_branches = models.ManyToManyField(
+        Branch, blank=True, related_name='preferred_by',
+        help_text='Branches this user prefers to work at.',
+    )
 
     class Meta:
         ordering = ['user__first_name', 'user__last_name']

@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'profiles',
     'qr_codes',
     'attendance',
+    'roster',
 ]
 
 MIDDLEWARE = [

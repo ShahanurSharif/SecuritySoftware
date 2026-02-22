@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
+from branches.serializers import BranchLiteSerializer
 from media_library.serializers import MediaSerializer
 from .models import Profile, ProfileAddress
 
@@ -21,6 +22,11 @@ class ProfileSerializer(serializers.ModelSerializer):
     address = ProfileAddressSerializer(required=False, allow_null=True)
     photo = MediaSerializer(read_only=True)
     photo_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    preferred_branches = BranchLiteSerializer(many=True, read_only=True)
+    preferred_branch_ids = serializers.PrimaryKeyRelatedField(
+        source='preferred_branches', queryset=__import__('branches.models', fromlist=['Branch']).Branch.objects.all(),
+        many=True, write_only=True, required=False,
+    )
 
     class Meta:
         model = Profile
@@ -28,6 +34,7 @@ class ProfileSerializer(serializers.ModelSerializer):
             'id', 'first_name', 'last_name', 'email', 'password',
             'phone', 'birthday', 'photo', 'photo_id', 'address',
             'role', 'group', 'status', 'last_login',
+            'preferred_branches', 'preferred_branch_ids',
         ]
 
     def validate_email(self, value):
@@ -61,6 +68,11 @@ class ProfileSerializer(serializers.ModelSerializer):
             profile.address = ProfileAddress.objects.create(**address_data)
 
         profile.save()
+
+        # Handle preferred branches
+        if 'preferred_branches' in validated_data:
+            profile.preferred_branches.set(validated_data.pop('preferred_branches'))
+
         return profile
 
     def update(self, instance, validated_data):
@@ -93,6 +105,11 @@ class ProfileSerializer(serializers.ModelSerializer):
                 instance.address = ProfileAddress.objects.create(**address_data)
 
         instance.save()
+
+        # Handle preferred branches
+        if 'preferred_branches' in validated_data:
+            instance.preferred_branches.set(validated_data.pop('preferred_branches'))
+
         return instance
 
 

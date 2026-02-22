@@ -42,6 +42,7 @@ urlpatterns = [
     path('api/', include('media_library.urls')),
     path('api/', include('qr_codes.urls')),
     path('api/', include('attendance.urls')),
+    path('api/', include('roster.urls')),
 ]
 
 if settings.DEBUG:
